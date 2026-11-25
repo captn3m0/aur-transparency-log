@@ -74,6 +74,12 @@ python -m aurlog run --key /secrets/cosign.key --state /data --out /tmp/out
 TUF signing config) and keeps bundles in `/data/bundles`. Needs `cosign` and
 `git` in the image. Keep `/data` on a volume so the cursor survives restarts.
 
+## Page
+
+The page lists the 10 newest AUR updates via rss2json (the AUR feed has no
+CORS headers), then asks GitHub's attestation API for each package. It assumes
+pkgname equals pkgbase and does not verify signatures.
+
 ## Limits
 
 - Cron can be delayed or dropped; the RSS feed holds about 90 minutes.
