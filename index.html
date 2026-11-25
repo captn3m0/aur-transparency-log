@@ -262,19 +262,18 @@ code { font-size: 1.3rem; }
 <p>A cooldown means waiting N days after a release before installing it, giving scanners and humans time to catch malicious updates. For the AUR that needs a trustworthy answer to "when did commit X first appear?". Git dates are chosen by the pusher, and the AUR only exposes the last modification time of the current head.</p>
 
 <h2>How</h2>
-<p>Every minute a Cloudflare Worker reads the AUR "modified" feed, confirms each head directly on aur.archlinux.org, and signs one statement listing the new commits. Each batch gets an RFC 3161 timestamp from Sigstore's timestamp authority, so the time comes from Sigstore rather than from us. A compromised observer can only make commits look newer, never older. Bundles live in object storage, and nothing is stored in this repository.</p>
+<p>Every minute a Cloudflare Worker reads the AUR "modified" feed, confirms each head directly on aur.archlinux.org, and signs one statement listing the new commits. Each batch gets an RFC 3161 timestamp from Sigstore's timestamp authority and an entry in the public Rekor v2 log, so the time comes from Sigstore rather than from us. A compromised observer can only make commits look newer, never older. Bundles live in object storage, and nothing is stored in this repository.</p>
 
 <h2>Query</h2>
 <p>Ask for the newest commit that already passes your cooldown by giving a Unix time rounded down to the hour, so answers cache well:</p>
-<pre><code>curl 'https://aur-tl.captnemo.in/v1/pkg/yay?before=1795644000'</code></pre>
+<pre><code>curl 'https://aur-tl.captnemo.in/v1/pkg/python-transformers?before=4102444800'</code></pre>
 <p>Other endpoints: <code>/v1/pkg/&lt;pkgbase&gt;/commit/&lt;sha&gt;</code>, <code>/history</code> and <code>/v1/batch</code>.</p>
 
 <h2>Verify</h2>
-<p>Download the returned bundle, then check its signature and timestamp. Take the time from the timestamp token, never from the API, and confirm the commit appears in the statement.</p>
-<pre><code>printf %s 'aur/yay' &gt; subject
+<p>Download the returned bundle, then check its signature, timestamp and log entry. Take the time from the timestamp token, never from the API, and confirm the commit appears in the statement.</p>
+<pre><code>printf %s 'aur/python-transformers' &gt; subject
 cosign verify-blob-attestation --key worker-1.pub --bundle bundle.json \
-  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 \
-  --insecure-ignore-tlog --use-signed-timestamps subject</code></pre>
+  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 subject</code></pre>
 <p>Key <code>worker-1</code> (SHA-256 of DER <code>6cb2c44d…12fe</code>), also published as a <a href="jwks.json">JWKS</a> with a <a href=".well-known/openid-configuration">discovery document</a>; issuer <code>https://captnemo.in/aur-transparency-log</code>.</p>
 <pre><code>-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4aScqmkbVDfEonuhVCigYGOzd2G8
@@ -290,7 +289,7 @@ K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
 <p><small>Times link to the signed bundle. This page does not verify signatures; use the command above.</small></p>
 
 <h2>Limits</h2>
-<p>The feed keeps about 90 minutes, so a long outage can miss packages. Rekor is not used, since Rekor v2 has no search or timestamps. Deletions are not attested yet, and only observed heads are attested, never intermediate commits. History starts at launch.</p>
+<p>The feed keeps about 90 minutes, so a long outage can miss packages. Rekor v2 has no search, so find an entry by the log index in its bundle. Deletions are not attested yet, and only observed heads are attested, never intermediate commits. History starts at launch.</p>
 <p><a href="https://github.com/captn3m0/aur-transparency-log">Source on GitHub</a></p>
 
 <script>
