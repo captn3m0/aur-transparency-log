@@ -1,6 +1,6 @@
 {
- "issuer": "https://captnemo.in/aur-transparency-log/backup",
- "jwks_uri": "https://captnemo.in/aur-transparency-log/backup/jwks.json",
+ "issuer": "https://captnemo.in/aur-transparency-log",
+ "jwks_uri": "https://captnemo.in/aur-transparency-log/jwks.json",
  "response_types_supported": [
   "id_token"
  ],
