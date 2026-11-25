@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>aur-transparency-log</title>
+<meta name="description" content="Trusted publish timestamps for AUR commits, so AUR helpers can enforce dependency cooldowns.">
 <style>
 /* Sakura.css v1.5.1
  * ================
@@ -249,53 +250,94 @@ label, legend, fieldset {
   font-weight: 600;
 }
 
-table { font-size: 1.4rem; }
-td, th { padding: .4rem .6rem; }
+html { scroll-behavior: smooth; }
+nav { font-size: 1.5rem; margin-bottom: 2rem; }
+nav a { margin-right: 1.2rem; }
+h2 { margin-top: 3.2rem; }
+table { font-size: 1.4rem; width: 100%; }
+td, th { padding: .5rem .7rem; vertical-align: top; }
 code { font-size: 1.3rem; }
+pre { font-size: 1.3rem; }
+.lead { font-size: 2rem; line-height: 1.5; }
+.pill { display: inline-block; padding: .1rem .9rem; border-radius: 99px; font-size: 1.3rem; border: 1px solid #ccc; }
+.ok { border-color: #2e7d32; color: #2e7d32; }
+.bad { border-color: #c62828; color: #c62828; }
+details { margin: 1rem 0; }
+summary { cursor: pointer; }
 </style>
 </head>
 <body>
 <h1>aur-transparency-log</h1>
-<p>Trusted publish timestamps for AUR commits, so AUR helpers can enforce dependency cooldowns.</p>
+<p class="lead">A trustworthy answer to "when did this AUR commit first appear?", so AUR helpers can wait out a cooldown before installing an update.</p>
+<p><span id="health" class="pill">checking service…</span></p>
+<nav><a href="#how">How it works</a><a href="#query">Query</a><a href="#verify">Verify</a><a href="#recent">Recent</a><a href="#limits">Limits</a><a href="https://github.com/captn3m0/aur-transparency-log">Source</a></nav>
 
-<h2>Why</h2>
-<p>A cooldown means waiting N days after a release before installing it, giving scanners and humans time to catch malicious updates. For the AUR that needs a trustworthy answer to "when did commit X first appear?". Git dates are chosen by the pusher, and the AUR only exposes the last modification time of the current head.</p>
+<h2 id="why">Why</h2>
+<p>A cooldown means waiting N days after a release before installing it, so scanners and people can catch malicious updates. Git dates are chosen by whoever pushes, and the AUR only exposes the last change time of the current head. This service records when each head was first seen, with a time Sigstore vouches for, not us.</p>
 
-<h2>How</h2>
-<p>Every minute a Cloudflare Worker reads the AUR "modified" feed, confirms each head directly on aur.archlinux.org, and signs one statement listing the new commits. Each batch gets an RFC 3161 timestamp from Sigstore's timestamp authority and an entry in the public Rekor v2 log, so the time comes from Sigstore rather than from us. A compromised observer can only make commits look newer, never older. Bundles live in object storage, and nothing is stored in this repository.</p>
+<h2 id="how">How it works</h2>
+<ol>
+<li>Every minute a Cloudflare Worker reads the AUR "modified" feed.</li>
+<li>It confirms each new head directly on aur.archlinux.org.</li>
+<li>It signs one statement per batch of commits.</li>
+<li>Sigstore's timestamp authority timestamps the signature, and Rekor v2 logs it.</li>
+<li>The signed bundle is stored; nothing lives in this repository.</li>
+</ol>
+<p>A compromised observer can only make commits look newer, never older. A one-off signed snapshot covers every package that existed at launch.</p>
 
-<h2>Query</h2>
-<p>Ask for the newest commit that already passes your cooldown by giving a Unix time rounded down to the hour, so answers cache well:</p>
-<pre><code>curl 'https://aur-tl.captnemo.in/v1/pkg/python-transformers?before=4102444800'</code></pre>
-<p>Other endpoints: <code>/v1/pkg/&lt;pkgbase&gt;/commit/&lt;sha&gt;</code>, <code>/history</code> and <code>/v1/batch</code>.</p>
+<h2 id="query">Query</h2>
+<p>Ask for the newest commit that already passes your cooldown. Give a Unix time rounded down to the hour, so everyone asking in the same hour shares a cached answer.</p>
+<pre><code>before=$(( $(date +%s) / 3600 * 3600 - 7*86400 ))   # 7-day cooldown
+curl "https://aur-tl.captnemo.in/v1/pkg/yay?before=$before"</code></pre>
+<table>
+<thead><tr><th>Endpoint</th><th>Returns</th></tr></thead>
+<tbody>
+<tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers?before=4102444800"><code>/v1/pkg/&lt;pkgbase&gt;?before=</code></a></td><td>newest commit at or before the cutoff</td></tr>
+<tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/history"><code>/v1/pkg/&lt;pkgbase&gt;/history</code></a></td><td>every attested commit, newest first</td></tr>
+<tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/commit/6b25f276555d6503c814531c993a2c9fcf965055"><code>/v1/pkg/&lt;pkgbase&gt;/commit/&lt;sha&gt;</code></a></td><td>one commit</td></tr>
+<tr><td><a href="https://aur-tl.captnemo.in/v1/batch?before=4102444800&amp;pkg=python-transformers&amp;pkg=agent-of-empires-bin"><code>/v1/batch?before=&amp;pkg=</code></a></td><td>many packages in one request</td></tr>
+<tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/yay/snapshot"><code>/v1/pkg/&lt;pkgbase&gt;/snapshot</code></a></td><td>entry in the launch snapshot</td></tr>
+<tr><td><a href="https://aur-tl.captnemo.in/v1/recent"><code>/v1/recent</code></a></td><td>latest attested commits</td></tr>
+</tbody>
+</table>
+<p>The result's <code>status</code> is <code>ok</code>, <code>too_new</code> (nothing old enough yet, so fail the cooldown) or <code>not_observed</code>. Full documentation is in the <a href="https://github.com/captn3m0/aur-transparency-log#api">README</a>.</p>
 
-<h2>Verify</h2>
-<p>Download the returned bundle, then check its signature, timestamp and log entry. Take the time from the timestamp token, never from the API, and confirm the commit appears in the statement.</p>
-<pre><code>printf %s 'aur/python-transformers' &gt; subject
-cosign verify-blob-attestation --key worker-1.pub --bundle bundle.json \
+<h2 id="verify">Verify</h2>
+<p>Don't trust the API; trust the bundle it points to. Take the time from the timestamp token, and confirm the commit appears in the signed statement.</p>
+<pre><code>curl -sO https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json
+printf %s 'aur/python-transformers' &gt; subject
+cosign verify-blob-attestation --key worker-1.pub \
+  --bundle 1795649492-6b25f276.sigstore.json \
   --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 subject</code></pre>
-<p>Key <code>worker-1</code> (SHA-256 of DER <code>6cb2c44d…12fe</code>), also published as a <a href="jwks.json">JWKS</a> with a <a href=".well-known/openid-configuration">discovery document</a>; issuer <code>https://captnemo.in/aur-transparency-log</code>.</p>
+<details>
+<summary>Signing key <code>worker-1</code></summary>
+<p>SHA-256 of DER <code>6cb2c44d…12fe</code>. Also published as a <a href="jwks.json">JWKS</a> with an <a href=".well-known/openid-configuration">OIDC discovery document</a>, issuer <code>https://captnemo.in/aur-transparency-log</code>.</p>
 <pre><code>-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4aScqmkbVDfEonuhVCigYGOzd2G8
 K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
 -----END PUBLIC KEY-----</code></pre>
+</details>
 
-<h2>Recently attested</h2>
-<p id="status">Loading recent attestations…</p>
+<h2 id="recent">Recently attested</h2>
+<p id="status">Loading…</p>
 <table>
-<thead><tr><th>Package</th><th>Attested (TSA)</th><th>Commit</th></tr></thead>
+<thead><tr><th>Package</th><th>Attested (UTC)</th><th>Commit</th></tr></thead>
 <tbody id="rows"></tbody>
 </table>
 <p><small>Times link to the signed bundle. This page does not verify signatures; use the command above.</small></p>
 
-<h2>Limits</h2>
-<p>The feed keeps about 90 minutes, so a long outage can miss packages. Rekor v2 has no search, so find an entry by the log index in its bundle. Deletions are not attested yet, and only observed heads are attested, never intermediate commits. History starts at launch.</p>
-<p><a href="https://github.com/captn3m0/aur-transparency-log">Source on GitHub</a></p>
+<h2 id="limits">Limits</h2>
+<ul>
+<li>If the feed (about 90 minutes of history) is missed during an outage, packages can be skipped.</li>
+<li>Deletions are not attested, and only observed heads are, never intermediate commits.</li>
+<li>History before launch is the snapshot only; the signing key is a Worker secret, not an HSM.</li>
+<li>Rekor v2 has no search: find an entry by the log index in its bundle.</li>
+</ul>
 
 <script>
 const API = "https://aur-tl.captnemo.in";
 const $ = id => document.getElementById(id);
-const fmt = t => new Date(t * 1000).toISOString().replace("T", " ").slice(0, 16) + "Z";
+const fmt = t => new Date(t * 1000).toISOString().replace("T", " ").slice(0, 16);
 
 function cell(tr, text, href) {
   const td = tr.insertCell();
@@ -303,20 +345,33 @@ function cell(tr, text, href) {
   else td.textContent = text;
 }
 
-async function main() {
+async function health() {
+  try {
+    const d = await (await fetch(API + "/healthz", { signal: AbortSignal.timeout(10000) })).json();
+    const ago = d.age === null ? "no cycle yet" : d.age < 90 ? "last cycle just now" : `last cycle ${Math.round(d.age / 60)} min ago`;
+    $("health").textContent = (d.ok ? "Live · " : "Degraded · ") + ago;
+    $("health").className = "pill " + (d.ok ? "ok" : "bad");
+  } catch (e) {
+    $("health").textContent = "Service unreachable";
+    $("health").className = "pill bad";
+  }
+}
+
+async function recent() {
   const r = await fetch(API + "/v1/recent", { signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error("HTTP " + r.status);
   const items = (await r.json()).items || [];
-  for (const i of items.slice(0, 40)) {
+  for (const i of items.slice(0, 30)) {
     const tr = $("rows").insertRow();
     cell(tr, i.pkgbase, "https://aur.archlinux.org/packages/" + encodeURIComponent(i.pkgbase));
     cell(tr, fmt(i.time), i.bundle);
     cell(tr, i.commit.slice(0, 12), "https://aur.archlinux.org/cgit/aur.git/commit/?h=" + encodeURIComponent(i.pkgbase) + "&id=" + i.commit);
   }
-  $("status").textContent = items.length ? `${Math.min(items.length, 40)} most recently attested commits.` : "No attestations yet.";
+  $("status").textContent = items.length ? `The ${Math.min(items.length, 30)} most recent commits.` : "No attestations yet.";
 }
 
-main().catch(e => { $("status").textContent = "Could not load recent attestations: " + e.message; });
+health();
+recent().catch(e => { $("status").textContent = "Could not load recent attestations: " + e.message; });
 </script>
 </body>
 </html>
