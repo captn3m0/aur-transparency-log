@@ -262,112 +262,62 @@ code { font-size: 1.3rem; }
 <p>A cooldown means waiting N days after a release before installing it, giving scanners and humans time to catch malicious updates. For the AUR that needs a trustworthy answer to "when did commit X first appear?". Git dates are chosen by the pusher, and the AUR only exposes the last modification time of the current head.</p>
 
 <h2>How</h2>
-<p>Every five minutes a GitHub Actions workflow reads the AUR "modified" feed, confirms each head directly on aur.archlinux.org, and signs one statement listing the new commits. The signature is keyless (GitHub OIDC) and logged in the public Sigstore Rekor log, so the timestamp comes from Sigstore rather than from us. A compromised observer can only make commits look newer, never older. Nothing is stored in the repository.</p>
+<p>Every minute a Cloudflare Worker reads the AUR "modified" feed, confirms each head directly on aur.archlinux.org, and signs one statement listing the new commits. Each batch gets an RFC 3161 timestamp from Sigstore's timestamp authority, so the time comes from Sigstore rather than from us. A compromised observer can only make commits look newer, never older. Bundles live in object storage, and nothing is stored in this repository.</p>
+
+<h2>Query</h2>
+<p>Ask for the newest commit that already passes your cooldown by giving a Unix time rounded down to the hour, so answers cache well:</p>
+<pre><code>curl 'https://aur-tl.captnemo.in/v1/pkg/yay?before=1795644000'</code></pre>
+<p>Other endpoints: <code>/v1/pkg/&lt;pkgbase&gt;/commit/&lt;sha&gt;</code>, <code>/history</code> and <code>/v1/batch</code>.</p>
 
 <h2>Verify</h2>
-<p>Attestations are signed by this workflow identity:</p>
-<pre><code>https://github.com/captn3m0/aur-transparency-log/.github/workflows/observe.yml@refs/heads/main
-issuer: https://token.actions.githubusercontent.com
-predicate: https://captnemo.in/aur-transparency-log/aur-published/v1</code></pre>
-<pre><code>printf %s 'aur/yay' > subject
-gh attestation verify subject -R captn3m0/aur-transparency-log \
-  --predicate-type https://captnemo.in/aur-transparency-log/aur-published/v1</code></pre>
-<p>The service at <a href="https://aur-tl.captnemo.in/">aur-tl.captnemo.in</a> signs each batch with its own key, predicate type <code>…/aur-published-key/v1</code>, issuer <code>https://captnemo.in/aur-transparency-log</code>. It publishes a <a href="jwks.json">JWKS</a> and <a href=".well-known/openid-configuration">discovery document</a>, and each commit's time comes from an RFC 3161 token. Key SHA-256 of DER <code>6cb2c44d…12fe</code>:</p>
+<p>Download the returned bundle, then check its signature and timestamp. Take the time from the timestamp token, never from the API, and confirm the commit appears in the statement.</p>
+<pre><code>printf %s 'aur/yay' &gt; subject
+cosign verify-blob-attestation --key worker-1.pub --bundle bundle.json \
+  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 \
+  --insecure-ignore-tlog --use-signed-timestamps subject</code></pre>
+<p>Key <code>worker-1</code> (SHA-256 of DER <code>6cb2c44d…12fe</code>), also published as a <a href="jwks.json">JWKS</a> with a <a href=".well-known/openid-configuration">discovery document</a>; issuer <code>https://captnemo.in/aur-transparency-log</code>.</p>
 <pre><code>-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4aScqmkbVDfEonuhVCigYGOzd2G8
 K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
 -----END PUBLIC KEY-----</code></pre>
-<p>Query it with <code>GET /v1/pkg/&lt;pkgbase&gt;?before=&lt;unix, hour-aligned&gt;</code> for the newest commit that passes a cooldown. The table below uses GitHub attestations from the earlier workflow.</p>
 
-<h2>Recent AUR updates</h2>
-<p id="status">Loading the AUR feed through rss2json (it sends CORS headers; the AUR does not)…</p>
+<h2>Recently attested</h2>
+<p id="status">Loading recent attestations…</p>
 <table>
-<thead><tr><th>Package</th><th>Modified</th><th>Attested (Rekor)</th><th>Commit</th></tr></thead>
+<thead><tr><th>Package</th><th>Attested (TSA)</th><th>Commit</th></tr></thead>
 <tbody id="rows"></tbody>
 </table>
-<p><small>This page only looks attestations up; it does not verify signatures. Use the commands above. GitHub's API allows 60 unauthenticated requests per hour; each page load uses 10.</small></p>
+<p><small>Times link to the signed bundle. This page does not verify signatures; use the command above.</small></p>
 
 <h2>Limits</h2>
-<p>GitHub cron can be late, and the feed keeps about 90 minutes, so a delayed run may miss packages. Deletions are not attested yet. Only observed heads are attested, never intermediate commits.</p>
+<p>The feed keeps about 90 minutes, so a long outage can miss packages. Rekor is not used, since Rekor v2 has no search or timestamps. Deletions are not attested yet, and only observed heads are attested, never intermediate commits. History starts at launch.</p>
 <p><a href="https://github.com/captn3m0/aur-transparency-log">Source on GitHub</a></p>
 
 <script>
-const REPO = "captn3m0/aur-transparency-log";
-const PRED = "https://captnemo.in/aur-transparency-log/aur-published/v1";
-const FEED = "https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent("https://aur.archlinux.org/rss/modified");
+const API = "https://aur-tl.captnemo.in";
 const $ = id => document.getElementById(id);
-
-async function sha256hex(s) {
-  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function attestations(base) {
-  const hex = await sha256hex("aur/" + base);
-  const url = `https://api.github.com/repos/${REPO}/attestations/sha256:${hex}?per_page=100&predicate_type=${encodeURIComponent(PRED)}`;
-  const r = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
-  if (r.status === 404) return [];
-  if (r.status === 403 || r.status === 429) throw new Error("rate limited");
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  const out = [];
-  for (const a of (await r.json()).attestations || []) {
-    try {
-      const b = a.bundle, st = JSON.parse(atob(b.dsseEnvelope.payload));
-      const tl = (b.verificationMaterial.tlogEntries || [])[0] || {};
-      for (const e of st.predicate.entries || [])
-        if (e.pkgbase === base) out.push({ commit: e.commit, time: Number(tl.integratedTime) || null, log: tl.logIndex });
-    } catch (e) { /* skip malformed attestation */ }
-  }
-  return out.sort((a, b) => (a.time || 0) - (b.time || 0));
-}
+const fmt = t => new Date(t * 1000).toISOString().replace("T", " ").slice(0, 16) + "Z";
 
 function cell(tr, text, href) {
   const td = tr.insertCell();
   if (href) { const a = document.createElement("a"); a.href = href; a.textContent = text; td.append(a); }
   else td.textContent = text;
-  return td;
-}
-
-const fmt = t => new Date(t * 1000).toISOString().replace("T", " ").slice(0, 16) + "Z";
-
-async function check(item) {
-  const tr = item.tr;
-  tr.deleteCell(3); tr.deleteCell(2);
-  cell(tr, "checking…"); cell(tr, "");
-  try {
-    const found = (await attestations(item.base)).filter(e => e.time && e.time >= item.ts - 600);
-    tr.deleteCell(3); tr.deleteCell(2);
-    if (!found.length) { cell(tr, "not attested yet"); cell(tr, ""); return; }
-    const e = found[found.length - 1];
-    const href = e.log != null ? "https://search.sigstore.dev/?logIndex=" + e.log : null;
-    cell(tr, fmt(e.time), href);
-    cell(tr, e.commit.slice(0, 12), "https://aur.archlinux.org/cgit/aur.git/commit/?h=" + encodeURIComponent(item.base) + "&id=" + e.commit);
-  } catch (err) {
-    tr.deleteCell(3); tr.deleteCell(2);
-    cell(tr, "lookup failed: " + err.message); cell(tr, "");
-  }
 }
 
 async function main() {
-  const r = await fetch(FEED, { signal: AbortSignal.timeout(15000) });
+  const r = await fetch(API + "/v1/recent", { signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error("HTTP " + r.status);
-  const feed = await r.json();
-  if (feed.status !== "ok") throw new Error(feed.message || "feed error");
-  const seen = new Set(), list = [];
-  for (const i of feed.items) {
-    const base = (i.title || "").trim(), ts = Math.floor(Date.parse(i.pubDate.replace(" ", "T") + "Z") / 1000);
-    if (!base || !ts || seen.has(base)) continue;
-    seen.add(base);
+  const items = (await r.json()).items || [];
+  for (const i of items.slice(0, 40)) {
     const tr = $("rows").insertRow();
-    cell(tr, base, "https://aur.archlinux.org/packages/" + encodeURIComponent(base));
-    cell(tr, fmt(ts)); cell(tr, "—"); cell(tr, "");
-    list.push({ base, ts, tr });
+    cell(tr, i.pkgbase, "https://aur.archlinux.org/packages/" + encodeURIComponent(i.pkgbase));
+    cell(tr, fmt(i.time), i.bundle);
+    cell(tr, i.commit.slice(0, 12), "https://aur.archlinux.org/cgit/aur.git/commit/?h=" + encodeURIComponent(i.pkgbase) + "&id=" + i.commit);
   }
-  $("status").textContent = `${list.length} most recently modified packages (pkgname assumed equal to pkgbase).`;
-  list.forEach(check);
+  $("status").textContent = items.length ? `${Math.min(items.length, 40)} most recently attested commits.` : "No attestations yet.";
 }
 
-main().catch(e => { $("status").textContent = "Could not load the AUR feed: " + e.message; });
+main().catch(e => { $("status").textContent = "Could not load recent attestations: " + e.message; });
 </script>
 </body>
 </html>
