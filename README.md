@@ -31,56 +31,46 @@ No state lives in this repo. A tiny cursor (`state.json`) is kept in the
 Actions cache. If it is lost the next run re-attests the last 30 minutes;
 duplicates are harmless because clients use the earliest entry.
 
+## Cloudflare Worker (aur-tl.captnemo.in)
+
+`worker/` is the main observer. A cron trigger runs every minute: it reads the
+feed, confirms heads over git smart-HTTP (`info/refs`), signs one DSSE
+statement per batch with an ECDSA P-256 key (WebCrypto), gets an RFC 3161
+token from timestamp.sigstore.dev, and writes to R2. No k8s, no repo state.
+
+R2 layout: `b/<cycle>.sigstore.json` (bundles), `c/<pkgbase>/<inverted-ts>-<commit>`
+(newest first), `k/<pkgbase>/<commit>`, `s/state.json` (cursor).
+
+API (all GET, CORS open):
+
+- `/v1/pkg/<pkgbase>?before=<unix>` newest commit with timestamp at or before the
+  cutoff. `before` must be a multiple of 3600 so responses cache. Status is
+  `ok`, `too_new` (nothing old enough), or `not_observed`.
+- `/v1/pkg/<pkgbase>/commit/<sha>`, `/v1/pkg/<pkgbase>/history`
+- `/v1/batch?before=<unix>&pkg=a&pkg=b` plus the distinct `bundles` to fetch
+- `/b/<cycle>.sigstore.json`, `/v1/keys`, `/jwks.json`, `/healthz`
+
+Deploy: `worker/deploy.sh` (needs `wrangler login`).
+
 ## Verify
 
-GitHub Actions identity (needs `gh`; the file is the subject name):
+Fetch the bundle for a commit, then:
 
 ```sh
 printf %s 'aur/yay' > subject
-gh attestation verify subject -R captn3m0/aur-transparency-log \
-  --predicate-type https://captnemo.in/aur-transparency-log/aur-published/v1 \
-  --format json --jq '.[].verificationResult.statement.predicate'
+cosign verify-blob-attestation --key keys/worker-1.pub --bundle bundle.json \
+  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 \
+  --insecure-ignore-tlog --use-signed-timestamps subject
 ```
 
-Equivalent with cosign, pinning the workflow identity:
-
-```sh
-cosign verify-blob-attestation --bundle bundle.json \
-  --certificate-identity https://github.com/captn3m0/aur-transparency-log/.github/workflows/observe.yml@refs/heads/main \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --type https://captnemo.in/aur-transparency-log/aur-published/v1 subject
-```
-
-The signing key (`cosign.pub`, sha256 of DER `1ef7424d...e0199`) is used by a
-separate deployment of this code, less often than the Actions identity. It has its own predicate type
-`.../aur-published-key/v1` and issuer `https://captnemo.in/aur-transparency-log`; the predicate carries
-`signer: {issuer, kid}`. The issuer publishes `/jwks.json` and
-`/.well-known/openid-configuration` (discovery only, not a login provider).
-
-```sh
-cosign verify-blob-attestation --key cosign.pub --bundle bundle.json \
-  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 subject
-```
-
-Match the `kid` in the predicate against
-https://captnemo.in/aur-transparency-log/jwks.json. Regenerate the JWKS
-with `python -m aurlog jwks --pub cosign.pub --out <dir>`.
-
-A client passes a cooldown when the Rekor time of the earliest entry for the
-commit is older than the cooldown. `keys.json` lists identities and keys with
+Then check that `predicate.entries` contains the commit, and take the time from
+the RFC 3161 token (not from the API). Key `worker-1`, sha256 of DER
+`6cb2c44d...12fe`, kid `Wjjw_PCbkNMkB04PWsPTQ5CP-yk7o8t74igNrB4si_4`. The JWKS
+is at https://aur-tl.captnemo.in/jwks.json. `keys.json` lists keys with
 validity windows.
 
-## Run the key-signing observer (k8s)
-
-```sh
-export COSIGN_PASSWORD=...        # from a secret
-python -m aurlog run --key /secrets/cosign.key --pub /secrets/cosign.pub \
-  --state /data --out /tmp/out
-```
-
-`run` loops every 300s, signs with `cosign attest-blob` (Rekor and TSA via the
-TUF signing config) and keeps bundles in `/data/bundles`. Needs `cosign` and
-`git` in the image. Keep `/data` on a volume so the cursor survives restarts.
+Rekor is not used: v2 has no search or timestamps, so the TSA token is the
+time source.
 
 ## Page
 

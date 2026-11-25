@@ -70,7 +70,7 @@ class KeyTests(unittest.TestCase):
     def test_jwk_from_cosign_pub(self):
         from aurlog import jwk
 
-        key = jwk.from_pem(os.path.join(os.path.dirname(__file__), "..", "cosign.pub"))
+        key = jwk.from_pem(os.path.join(os.path.dirname(__file__), "..", "keys", "worker-1.pub"))
         self.assertEqual((key["kty"], key["crv"], key["alg"]), ("EC", "P-256", "ES256"))
         self.assertEqual(key["kid"], jwk.thumbprint(key))
         self.assertEqual(len(jwk.discovery("https://x")["jwks_uri"]) > 0, True)

@@ -1,0 +1,23 @@
+name = "aur-tl"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+account_id = "34c97bfc648a63e10eb2a368ad302011"
+workers_dev = false
+
+[triggers]
+crons = ["* * * * *"]
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "aur-tl"
+
+[vars]
+ISSUER = "https://captnemo.in/aur-transparency-log"
+PUBLIC_BASE = "https://aur-tl.captnemo.in"
+GRAN = "3600"
+MAX_CANDIDATES = "15"
+LOOKBACK = "1800"
+
+[[routes]]
+pattern = "aur-tl.captnemo.in"
+custom_domain = true

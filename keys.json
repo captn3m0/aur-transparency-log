@@ -11,16 +11,16 @@
   ],
   "keys": [
     {
-      "id": "key-1",
+      "id": "worker-1",
       "type": "ecdsa-p256",
-      "public_key_file": "cosign.pub",
-      "sha256_der_fingerprint": "1ef7424d85f457cdde8b7532d7f820535376df764569c7aaf18c3bac749e0199",
-      "valid_from": "2026-11-25T00:00:00Z",
-      "valid_until": null,
-      "kid": "Wh95wQGTlF_kd6vai2kVu_Oau6NZaqsUr7pO3ikkkJM",
+      "public_key_file": "keys/worker-1.pub",
+      "sha256_der_fingerprint": "6cb2c44d43a74be855556c903611bfbb54f2f92785997f85920ca61ccd9212fe",
+      "kid": "Wjjw_PCbkNMkB04PWsPTQ5CP-yk7o8t74igNrB4si_4",
       "issuer": "https://captnemo.in/aur-transparency-log",
-      "jwks_uri": "https://captnemo.in/aur-transparency-log/jwks.json",
-      "predicate_type": "https://captnemo.in/aur-transparency-log/aur-published-key/v1"
+      "jwks_uri": "https://aur-tl.captnemo.in/jwks.json",
+      "predicate_type": "https://captnemo.in/aur-transparency-log/aur-published-key/v1",
+      "valid_from": "2026-11-25T00:00:00Z",
+      "valid_until": null
     }
   ],
   "predicate_types": {
