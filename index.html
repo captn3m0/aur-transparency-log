@@ -279,13 +279,12 @@ NQAe8Yj+pTmmelF8qn/fLCtcNouggp0qnZujx5ZTcAgUWWeDj1bRGBPEew==
 -----END PUBLIC KEY-----</code></pre>
 
 <h2>Recent AUR updates</h2>
-<p id="status">Loading the AUR feed through a CORS proxy…</p>
+<p id="status">Loading the AUR feed through rss2json (it sends CORS headers; the AUR does not)…</p>
 <table>
 <thead><tr><th>Package</th><th>Modified</th><th>Attested (Rekor)</th><th>Commit</th></tr></thead>
 <tbody id="rows"></tbody>
 </table>
-<p><button id="more" hidden>Check next 10</button></p>
-<p><small>This page only looks attestations up; it does not verify signatures. Use the commands above. GitHub's API allows 60 unauthenticated requests per hour.</small></p>
+<p><small>This page only looks attestations up; it does not verify signatures. Use the commands above. GitHub's API allows 60 unauthenticated requests per hour; each page load uses 10.</small></p>
 
 <h2>Limits</h2>
 <p>GitHub cron can be late, and the feed keeps about 90 minutes, so a delayed run may miss packages. Deletions are not attested yet. Only observed heads are attested, never intermediate commits.</p>
@@ -294,46 +293,12 @@ NQAe8Yj+pTmmelF8qn/fLCtcNouggp0qnZujx5ZTcAgUWWeDj1bRGBPEew==
 <script>
 const REPO = "captn3m0/aur-transparency-log";
 const PRED = "https://captnemo.in/aur-transparency-log/aur-published/v1";
-const RSS = "https://aur.archlinux.org/rss/modified";
-const RPC = "https://aur.archlinux.org/rpc/v5/info?";
-const WORKER = "";
-const custom = new URLSearchParams(location.search).get("proxy") || WORKER;
-const ROUTES = [
-  u => u,
-  ...(custom ? [u => custom + encodeURIComponent(u)] : []),
-  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
-  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
-  u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
-];
+const FEED = "https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent("https://aur.archlinux.org/rss/modified");
 const $ = id => document.getElementById(id);
-const PAGE = 10;
-let list = [], next = 0;
-
-async function fetchText(url) {
-  let last = "no route";
-  for (const route of ROUTES) {
-    try {
-      const r = await fetch(route(url), { signal: AbortSignal.timeout(12000) });
-      if (r.ok) return await r.text();
-      last = "HTTP " + r.status;
-    } catch (e) { last = e.message; }
-  }
-  throw new Error(last);
-}
 
 async function sha256hex(s) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function bases(names) {
-  const map = {};
-  try {
-    const q = names.map(n => "arg[]=" + encodeURIComponent(n)).join("&");
-    const res = JSON.parse(await fetchText(RPC + q)).results || [];
-    for (const r of res) map[r.Name] = r.PackageBase;
-  } catch (e) { console.warn("rpc failed, assuming pkgname == pkgbase", e); }
-  return map;
 }
 
 async function attestations(base) {
@@ -382,37 +347,26 @@ async function check(item) {
   }
 }
 
-function checkNext() {
-  const batch = list.slice(next, next + PAGE);
-  next += PAGE;
-  batch.forEach(check);
-  $("more").hidden = next >= list.length;
-}
-
 async function main() {
-  const xml = new DOMParser().parseFromString(await fetchText(RSS), "text/xml");
-  const rows = [...xml.querySelectorAll("item")].map(i => ({
-    name: i.querySelector("title").textContent.trim(),
-    ts: Math.floor(Date.parse(i.querySelector("pubDate").textContent) / 1000),
-  })).filter(r => r.name && r.ts);
-  const map = await bases(rows.map(r => r.name).slice(0, 40));
-  const seen = new Set();
-  for (const r of rows.slice(0, 40)) {
-    const base = map[r.name] || r.name;
-    if (seen.has(base)) continue;
+  const r = await fetch(FEED, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const feed = await r.json();
+  if (feed.status !== "ok") throw new Error(feed.message || "feed error");
+  const seen = new Set(), list = [];
+  for (const i of feed.items) {
+    const base = (i.title || "").trim(), ts = Math.floor(Date.parse(i.pubDate.replace(" ", "T") + "Z") / 1000);
+    if (!base || !ts || seen.has(base)) continue;
     seen.add(base);
     const tr = $("rows").insertRow();
-    cell(tr, base, "https://aur.archlinux.org/packages/" + encodeURIComponent(r.name));
-    cell(tr, fmt(r.ts)); cell(tr, "—"); cell(tr, "");
-    list.push({ base, ts: r.ts, tr });
+    cell(tr, base, "https://aur.archlinux.org/packages/" + encodeURIComponent(base));
+    cell(tr, fmt(ts)); cell(tr, "—"); cell(tr, "");
+    list.push({ base, ts, tr });
   }
-  $("status").textContent = `${list.length} recently modified packages.`;
-  $("more").hidden = false;
-  $("more").onclick = checkNext;
-  checkNext();
+  $("status").textContent = `${list.length} most recently modified packages (pkgname assumed equal to pkgbase).`;
+  list.forEach(check);
 }
 
-main().catch(e => { $("status").textContent = "Could not load the AUR feed (" + e.message + "). The AUR sends no CORS headers; append ?proxy=https://your-worker.example/?url= to use your own proxy."; });
+main().catch(e => { $("status").textContent = "Could not load the AUR feed: " + e.message; });
 </script>
 </body>
 </html>
