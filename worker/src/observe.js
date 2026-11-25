@@ -113,7 +113,12 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
   if (entries.length) {
     try {
       const stmt = await statement(entries, now, env.ISSUER, signer.kid);
-      const { bundle, time } = await signBundle(signer, stmt, fetchFn);
+      const { bundle, time } = await signBundle(signer, stmt, {
+        fetchFn,
+        tsaUrls: env.TSA_URLS ? env.TSA_URLS.split(",") : undefined,
+        tsaMin: Number(env.TSA_MIN || 1),
+        rekorUrl: env.REKOR_URL || null,
+      });
       const cycle = `${time}-${entries[0].commit.slice(0, 8)}`;
       await recordCycle(env.BUCKET, cycle, bundle, entries, time);
       const fresh = entries.map((x) => ({ pkgbase: x.pkgbase, commit: x.commit, time, bundle: `${env.PUBLIC_BASE}/b/${cycle}.sigstore.json` }));
@@ -124,6 +129,7 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
       return fail(env, { ...st, pending }, now, "sign", e.message);
     }
   }
-  await writeJson(env.BUCKET, "s/state.json", { ...st, last_ts: newestTs, pending, last_run: now, last_error: null, last_attempt: now });
+  const quiet = !entries.length && newestTs === st.last_ts && !Object.keys(pending).length && !st.last_error && now - (st.last_run || 0) < 300;
+  if (!quiet) await writeJson(env.BUCKET, "s/state.json", { ...st, last_ts: newestTs, pending, last_run: now, last_error: null, last_attempt: now });
   return { entries: entries.length };
 }

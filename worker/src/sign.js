@@ -1,5 +1,5 @@
 import { b64, b64u, concat, ecdsaRawToDer, enc, fromB64, fromB64u, fromHex, hex } from "./der.js";
-import { timestamp } from "./tsa.js";
+import { timestampMany, TSA_URL } from "./tsa.js";
 
 const SPKI_PREFIX = fromHex("3059301306072a8648ce3d020106082a8648ce3d030107034200");
 export const PAYLOAD_TYPE = "application/vnd.in-toto+json";
@@ -38,19 +38,33 @@ export async function statement(entries, now, issuer, kid) {
   };
 }
 
-export async function signBundle(signer, stmt, fetchFn = fetch) {
+export const REKOR_V2_URL = "https://log2025-1.rekor.sigstore.dev";
+
+export const paeBytes = (payload) => concat(enc.encode(`DSSEv1 ${PAYLOAD_TYPE.length} ${PAYLOAD_TYPE} ${payload.length} `), payload);
+
+export async function rekorEntry(signer, pae, sig, url, fetchFn = fetch) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", pae));
+  const body = { hashedRekordRequestV002: { digest: b64(digest), signature: { content: b64(sig), verifier: { publicKey: { rawBytes: b64(signer.spki) }, keyDetails: "PKIX_ECDSA_P256_SHA_256" } } } };
+  const res = await fetchFn(`${url}/api/v2/log/entries`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(25000) });
+  if (!res.ok) throw new Error(`rekor http ${res.status}: ${(await res.text()).slice(0, 120)}`);
+  return res.json();
+}
+
+export async function signBundle(signer, stmt, opts = {}) {
+  const { fetchFn = fetch, tsaUrls = [TSA_URL], tsaMin = 1, rekorUrl = null } = opts;
   const payload = enc.encode(JSON.stringify(stmt));
-  const pae = concat(enc.encode(`DSSEv1 ${PAYLOAD_TYPE.length} ${PAYLOAD_TYPE} ${payload.length} `), payload);
+  const pae = paeBytes(payload);
   const raw = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, signer.key, pae));
   const sig = ecdsaRawToDer(raw);
-  const ts = await timestamp(sig, fetchFn);
+  const [ts, tle] = await Promise.all([timestampMany(sig, tsaUrls, tsaMin, fetchFn), rekorUrl ? rekorEntry(signer, pae, sig, rekorUrl, fetchFn) : null]);
   const bundle = {
     mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
     verificationMaterial: {
       publicKey: { hint: signer.hint },
-      timestampVerificationData: { rfc3161Timestamps: [{ signedTimestamp: b64(ts.token) }] },
+      ...(tle ? { tlogEntries: [tle] } : {}),
+      timestampVerificationData: { rfc3161Timestamps: ts.tokens.map((t) => ({ signedTimestamp: b64(t.token) })) },
     },
     dsseEnvelope: { payload: b64(payload), payloadType: PAYLOAD_TYPE, signatures: [{ sig: b64(sig) }] },
   };
-  return { bundle, time: ts.time };
+  return { bundle, time: ts.time, tsaErrors: ts.errors };
 }

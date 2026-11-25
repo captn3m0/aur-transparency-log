@@ -17,17 +17,26 @@ export function checkGranted(resp) {
 }
 
 export function genTime(resp) {
-  const m = /\x18\x0f(\d{14})Z/.exec(new TextDecoder("latin1").decode(resp));
+  const m = /\x18[\x0f-\x20](\d{14})(?:\.\d+)?Z/.exec(new TextDecoder("latin1").decode(resp));
   if (!m) throw new Error("tsa genTime not found");
   const d = m[1];
   return Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8), +d.slice(8, 10), +d.slice(10, 12), +d.slice(12, 14)) / 1000;
 }
 
-export async function timestamp(signature, fetchFn = fetch) {
+export async function timestamp(signature, fetchFn = fetch, url = TSA_URL) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", signature));
-  const res = await fetchFn(TSA_URL, { method: "POST", headers: { "Content-Type": "application/timestamp-query" }, body: buildRequest(digest) });
+  const res = await fetchFn(url, { method: "POST", headers: { "Content-Type": "application/timestamp-query" }, body: buildRequest(digest), signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error(`tsa http ${res.status}: ${(await res.text()).slice(0, 120)}`);
   const resp = new Uint8Array(await res.arrayBuffer());
   checkGranted(resp);
   return { token: resp, time: genTime(resp) };
+}
+
+// The first URL is the primary and must succeed; the rest are best-effort extras.
+export async function timestampMany(signature, urls, min = 1, fetchFn = fetch) {
+  const settled = await Promise.allSettled(urls.map((u) => timestamp(signature, fetchFn, u).then((r) => ({ ...r, url: u }))));
+  const errors = settled.flatMap((s, i) => (s.status === "rejected" ? [`${urls[i]}: ${s.reason.message}`] : []));
+  const ok = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
+  if (settled[0].status !== "fulfilled" || ok.length < min) throw new Error(`tsa: ${ok.length}/${min} ok, primary ${settled[0].status}; ${errors.join("; ")}`.slice(0, 280));
+  return { tokens: ok, time: Math.max(...ok.map((r) => r.time)), errors };
 }

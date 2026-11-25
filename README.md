@@ -16,8 +16,10 @@ timestamp authority, not from this project.
 2. map names to pkgbases with the AUR RPC
 3. confirm each head over git smart-HTTP (`info/refs`), 2 in flight
 4. sign one in-toto statement per batch (ECDSA P-256, WebCrypto, DSSE)
-5. get an RFC 3161 token from timestamp.sigstore.dev over the signature
-6. write the Sigstore bundle and pointers to R2
+5. get RFC 3161 tokens over the signature (`TSA_URLS`: the first is required,
+   any others are best-effort extras; `TSA_MIN` sets how many must succeed)
+6. log a `hashedrekord` entry in Rekor v2 (`REKOR_URL`, Rekor v2 has no DSSE type)
+7. write the Sigstore bundle and pointers to R2
 
 Subjects are `aur/<pkgbase>` with digest `sha256("aur/<pkgbase>")`; commits
 live in the predicate. Failures are recorded in `s/state.json` and surfaced at
@@ -32,32 +34,56 @@ lives in pass at `Nebula/aur-tl/SIGNING_KEY`. `worker/deploy.sh` ships the code.
 
 ## API
 
-All GET, CORS open:
+Base URL `https://aur-tl.captnemo.in`. All endpoints are GET with open CORS.
+`before` is a Unix time that must be a multiple of 3600, so a whole hour of
+clients shares one cacheable URL. Compute a 7-day cooldown cutoff with
+`before=$(( $(date +%s) / 3600 * 3600 - 7*86400 ))`; rounding down is stricter.
 
-- `/v1/pkg/<pkgbase>?before=<unix>`: newest commit with a timestamp at or before
-  the cutoff. `before` must be a multiple of 3600 so responses cache. Status is
-  `ok`, `too_new` (nothing old enough yet) or `not_observed`.
-- `/v1/pkg/<pkgbase>/commit/<sha>`, `/v1/pkg/<pkgbase>/history`
-- `/v1/batch?before=<unix>&pkg=a&pkg=b` plus the distinct `bundles` to fetch
-- `/v1/recent`, `/b/<cycle>.sigstore.json`, `/v1/keys`, `/jwks.json`, `/healthz`
+| Endpoint | Example |
+| --- | --- |
+| Newest commit at or before a cutoff | https://aur-tl.captnemo.in/v1/pkg/python-transformers?before=4102444800 |
+| One commit | https://aur-tl.captnemo.in/v1/pkg/python-transformers/commit/6b25f276555d6503c814531c993a2c9fcf965055 |
+| History, newest first | https://aur-tl.captnemo.in/v1/pkg/python-transformers/history |
+| Many packages, one request | https://aur-tl.captnemo.in/v1/batch?before=4102444800&pkg=python-transformers&pkg=agent-of-empires-bin |
+| Recently attested | https://aur-tl.captnemo.in/v1/recent |
+| Signed bundle | https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json |
+| Signing key (JWK) | https://aur-tl.captnemo.in/v1/keys |
+| JWKS | https://aur-tl.captnemo.in/jwks.json |
+| OIDC discovery | https://aur-tl.captnemo.in/.well-known/openid-configuration |
+| Health (cron age and last error) | https://aur-tl.captnemo.in/healthz |
+| Index | https://aur-tl.captnemo.in/ |
+
+`/v1/pkg` returns `status`: `ok`, `too_new` (the newest commit is newer than the
+cutoff; fail the cooldown or roll back via `/history`) or `not_observed`. A bad
+`before` returns 400 with the rounded value in `suggest`.
+
+Caching: bundles and commit lookups are immutable (one year); a cutoff more than
+two hours old is immutable once it returns `ok`; `/history` and `/v1/pkg` for the
+current hour cache for 5 minutes, `/v1/recent` for 1 minute, keys for a day.
+Responses are also stored in the edge cache under a canonical key, so repeat
+requests never reach R2.
 
 ## Verify
 
 ```sh
-printf %s 'aur/yay' > subject
-cosign verify-blob-attestation --key keys/worker-1.pub --bundle bundle.json \
-  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 \
-  --insecure-ignore-tlog --use-signed-timestamps subject
+curl -sO https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json
+printf %s 'aur/python-transformers' > subject
+cosign verify-blob-attestation --key keys/worker-1.pub \
+  --bundle 1795649492-6b25f276.sigstore.json \
+  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 subject
 ```
 
-Then check that `predicate.entries` contains the commit, and take the time from
-the RFC 3161 token, not from the API. Key `worker-1`: sha256 of DER
+The bundle also carries a Rekor v2 entry, so the command needs neither
+`--insecure-ignore-tlog` nor `--use-signed-timestamps`. Check that
+`predicate.entries` contains the commit, and take the time from the RFC 3161
+token, not from the API. Key `worker-1`: sha256 of DER
 `6cb2c44d...12fe`, kid `Wjjw_PCbkNMkB04PWsPTQ5CP-yk7o8t74igNrB4si_4`, JWKS at
 https://aur-tl.captnemo.in/jwks.json. `keys.json` lists keys with validity
 windows.
 
-Rekor is not used: v2 has no search or timestamps, so the TSA token is the
-time source.
+Rekor v2 has no search or timestamps: find an entry by the log index in the
+bundle, and the TSA token is the time source. `REKOR_URL` points at one log
+shard (`log2025-1`); update it when Sigstore's signing config rolls to a new one.
 
 ## Limits
 
@@ -70,9 +96,6 @@ time source.
 ## Development
 
 ```sh
-node worker/test/integration.mjs        # live cycle against a mock bucket
-PYTHONPATH=src uv run --no-project python -m unittest discover -s tests -t .
+node worker/test/integration.mjs   # live cycle against a mock bucket
+./worker/deploy.sh                 # ships the code (infra is in nebula)
 ```
-
-`src/aurlog` is the earlier Python observer (cosign based); it is kept as a
-local reference and is not deployed.
