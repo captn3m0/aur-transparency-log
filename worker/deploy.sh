@@ -1,7 +1,7 @@
 #!/bin/sh
-# Deploys the aur-tl Worker code; the bucket, Worker shell and domain are managed by nebula/cloudflare/aur-tl.tf.
+# Ships the Worker code; bucket, Worker shell, domain and SIGNING_KEY secret are managed by nebula/cloudflare/aur-tl.tf.
 set -eu
 cd "$(dirname "$0")"
-W="npx --yes wrangler@4"
-$W secret put SIGNING_KEY < "${SIGNING_KEY_FILE:-../.secrets/worker.pem}"
-$W deploy
+CLOUDFLARE_API_TOKEN="$(cd "${NEBULA:-$HOME/projects/personal/nebula}/cloudflare" && tofu output -raw aur_tl_cloudflare_api_token)"
+export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID=34c97bfc648a63e10eb2a368ad302011
+npx --yes wrangler@4 deploy

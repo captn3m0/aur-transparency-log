@@ -26,8 +26,9 @@ live in the predicate. Failures are recorded in `s/state.json` and surfaced at
 R2 layout: `b/<cycle>.sigstore.json`, `c/<pkgbase>/<inverted-ts>-<commit>`
 (newest first), `k/<pkgbase>/<commit>`, `s/state.json`.
 
-Infrastructure (R2 bucket, Worker shell, domain, deploy token) is managed in
-nebula (`cloudflare/aur-tl.tf`); `worker/deploy.sh` ships the code.
+Infrastructure (R2 bucket, Worker shell, domain, deploy token and the
+`SIGNING_KEY` secret) is managed in nebula (`cloudflare/aur-tl.tf`); the secret
+lives in pass at `Nebula/aur-tl/SIGNING_KEY`. `worker/deploy.sh` ships the code.
 
 ## API
 
@@ -63,7 +64,7 @@ time source.
 - The feed keeps about 90 minutes; a long outage can miss packages.
 - Deletions, bootstrap of pre-launch heads and mirror reconciliation are not
   implemented. History starts at launch.
-- The key is a Worker secret, not an HSM.
+- The key is a Worker secret (kept in pass), not an HSM.
 - The page does not verify signatures.
 
 ## Development

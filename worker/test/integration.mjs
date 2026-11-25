@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { handle } from "../src/api.js";
 import { runCycle } from "../src/observe.js";
 import { loadKey } from "../src/sign.js";
@@ -15,7 +16,7 @@ class Bucket {
 }
 
 const env = { BUCKET: new Bucket(), ISSUER: "https://captnemo.in/aur-transparency-log", PUBLIC_BASE: "https://aur-tl.captnemo.in", GRAN: "1", MAX_CANDIDATES: "4", LOOKBACK: "1800" };
-const signer = await loadKey(readFileSync(".secrets/worker.pem", "utf8"));
+const signer = await loadKey(process.env.SIGNING_KEY || execFileSync("pass", ["show", "Nebula/aur-tl/SIGNING_KEY"], { encoding: "utf8" }));
 console.log("kid", signer.kid);
 const r = await runCycle(env, signer);
 console.log("cycle", r);

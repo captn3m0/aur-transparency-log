@@ -25,7 +25,7 @@ export async function handle(req, env, signer, now = Math.floor(Date.now() / 100
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
   const url = new URL(req.url);
-  const path = url.pathname;
+  const path = url.pathname.replace(/\/+$/, "") || "/";
   const gran = Number(env.GRAN || 3600);
   if (path === "/") return json({ name: "aur-transparency-log", docs: "https://captnemo.in/aur-transparency-log/", endpoints: ["/v1/pkg/{pkgbase}?before=", "/v1/pkg/{pkgbase}/commit/{sha}", "/v1/pkg/{pkgbase}/history", "/v1/batch?before=&pkg=", "/v1/recent", "/v1/keys", "/healthz"] });
   if (path === "/healthz") {
@@ -58,7 +58,7 @@ export async function handle(req, env, signer, now = Math.floor(Date.now() / 100
   if ((m = /^\/v1\/pkg\/([^/]+)\/history$/.exec(path))) {
     if (!BASE_RE.test(m[1])) return json({ error: "invalid pkgbase" }, 400);
     const h = await history(env.BUCKET, m[1], url.searchParams.get("cursor") || undefined);
-    return json({ pkgbase: m[1], items: h.items.map((i) => ({ commit: i.commit, time: i.ts, bundle: bundleUrl(env, i.cycle) })), cursor: h.cursor }, 200, "public, max-age=60");
+    return json({ pkgbase: m[1], status: h.items.length ? "ok" : "not_observed", items: h.items.map((i) => ({ commit: i.commit, time: i.ts, bundle: bundleUrl(env, i.cycle) })), cursor: h.cursor }, 200, "public, max-age=60");
   }
   const single = /^\/v1\/pkg\/([^/]+)$/.exec(path);
   if (single || path === "/v1/batch") {
@@ -71,5 +71,5 @@ export async function handle(req, env, signer, now = Math.floor(Date.now() / 100
     const results = await Promise.all(pkgs.map((p) => lookup(env, p, before, now)));
     return json({ before, results, bundles: [...new Set(results.filter((r) => r.bundle).map((r) => r.bundle))] }, 200, cache);
   }
-  return json({ error: "not found" }, 404);
+  return json({ error: "not found", hint: "try /v1/pkg/<pkgbase>/history, /v1/pkg/<pkgbase>?before=<unix>, /v1/recent or /" }, 404);
 }
