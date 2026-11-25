@@ -45,6 +45,10 @@ clients shares one cacheable URL. Compute a 7-day cooldown cutoff with
 | One commit | https://aur-tl.captnemo.in/v1/pkg/python-transformers/commit/6b25f276555d6503c814531c993a2c9fcf965055 |
 | History, newest first | https://aur-tl.captnemo.in/v1/pkg/python-transformers/history |
 | Many packages, one request | https://aur-tl.captnemo.in/v1/batch?before=4102444800&pkg=python-transformers&pkg=agent-of-empires-bin |
+| Latest full snapshot | https://aur-tl.captnemo.in/v1/snapshot |
+| Package entry in the snapshot | https://aur-tl.captnemo.in/v1/pkg/yay/snapshot |
+| Snapshot bundle | https://aur-tl.captnemo.in/snapshot/1795649707/bundle.sigstore.json |
+| Snapshot shard (64 of them) | https://aur-tl.captnemo.in/snapshot/1795649707/3d.json |
 | Recently attested | https://aur-tl.captnemo.in/v1/recent |
 | Signed bundle | https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json |
 | Signing key (JWK) | https://aur-tl.captnemo.in/v1/keys |
@@ -85,11 +89,36 @@ Rekor v2 has no search or timestamps: find an entry by the log index in the
 bundle, and the TSA token is the time source. `REKOR_URL` points at one log
 shard (`log2025-1`); update it when Sigstore's signing config rolls to a new one.
 
+## Snapshot of everything
+
+`worker/scripts/snapshot.mjs --upload` signs the whole current AUR once: the AUR
+metadata dump (`packages-meta-ext-v1.json.gz`) lists every pkgbase, heads come
+from the GitHub mirror, and recent plus 150 random heads are re-checked
+directly on the AUR. Entries `[pkgbase, commit, modified_ts]` go into 64 shards
+by `sha256(pkgbase)`; the signed predicate (`.../aur-snapshot/v1`) holds each
+shard's sha256, with its own TSA token and Rekor v2 entry. Snapshot 1795649707
+covers 119,306 pkgbases (278 re-checked, 0 differing).
+
+`/v1/pkg/<pkgbase>?before=` falls back to the snapshot when a package has no
+later observation and the cutoff is not older than the snapshot. To verify:
+
+```sh
+curl -sO https://aur-tl.captnemo.in/snapshot/1795649707/bundle.sigstore.json
+# subject = compact JSON of predicate.shard_sha256 (jq -c keeps the order)
+jq -r .dsseEnvelope.payload bundle.sigstore.json | base64 -d | jq -c .predicate.shard_sha256 | tr -d '\n' > subject
+cosign verify-blob-attestation --key keys/worker-1.pub --bundle bundle.sigstore.json \
+  --type https://captnemo.in/aur-transparency-log/aur-snapshot/v1 subject
+```
+
+Then `sha256sum` the shard and compare with `shard_sha256` for its name. A
+snapshot says the head existed at its time; history before it is not recoverable.
+Re-run the script to take a new snapshot (it is manual for now).
+
 ## Limits
 
 - The feed keeps about 90 minutes; a long outage can miss packages.
-- Deletions, bootstrap of pre-launch heads and mirror reconciliation are not
-  implemented. History starts at launch.
+- Deletions and mirror reconciliation are not implemented. Observed history
+  starts at launch; the snapshot covers the state at that moment.
 - The key is a Worker secret (kept in pass), not an HSM.
 - The page does not verify signatures.
 
