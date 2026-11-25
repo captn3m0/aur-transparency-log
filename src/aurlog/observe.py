@@ -50,7 +50,7 @@ def check(base):
         return None, err
 
 
-def observe(state_dir, out_dir, now=None):
+def observe(state_dir, out_dir, now=None, profile=batch.DEFAULT):
     now = int(now or time.time())
     path = os.path.join(state_dir, "state.json")
     st = state.load(path)
@@ -85,7 +85,7 @@ def observe(state_dir, out_dir, now=None):
     if not entries:
         state.save(path, nxt)
         return []
-    batch.write(out_dir, entries, now)
+    batch.write(out_dir, entries, now, profile)
     state.save(path + ".next", nxt)
     return entries
 

@@ -3,7 +3,7 @@ import os
 import sys
 import time
 
-from . import observe, sign
+from . import BACKUP_ISSUER, batch, jwk, observe, sign
 
 
 def emit(**values):
@@ -26,8 +26,8 @@ def cmd_commit(args):
     return 0
 
 
-def cycle(args):
-    entries = observe.observe(args.state, args.out)
+def cycle(args, profile):
+    entries = observe.observe(args.state, args.out, profile=profile)
     if not entries:
         return
     bundles = os.path.join(args.state, "bundles")
@@ -39,10 +39,17 @@ def cycle(args):
     print(f"signed {len(entries)} entries -> {bundle}", flush=True)
 
 
+def cmd_jwks(args):
+    keys = jwk.publish(args.pub, args.issuer, args.out)
+    print(f"wrote {len(keys)} key(s) kid={[k['kid'] for k in keys]} to {args.out}")
+    return 0
+
+
 def cmd_run(args):
+    profile = batch.backup_profile(jwk.from_pem(args.pub[0])["kid"])
     while True:
         try:
-            cycle(args)
+            cycle(args, profile)
         except Exception as err:
             print(f"cycle failed: {err}", file=sys.stderr, flush=True)
         if args.once:
@@ -53,16 +60,20 @@ def cmd_run(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="aurlog")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("observe", cmd_observe), ("commit", cmd_commit), ("run", cmd_run)):
+    for name, fn in (("observe", cmd_observe), ("commit", cmd_commit), ("run", cmd_run), ("jwks", cmd_jwks)):
         p = sub.add_parser(name)
         p.add_argument("--state", default=".state")
         p.add_argument("--out", default="out")
         p.set_defaults(fn=fn)
         if name == "run":
             p.add_argument("--key", default=os.environ.get("AURLOG_KEY", "cosign.key"))
+            p.add_argument("--pub", nargs=1, default=[os.environ.get("AURLOG_PUB", "cosign.pub")])
             p.add_argument("--interval", type=int, default=300)
             p.add_argument("--once", action="store_true")
             p.add_argument("--offline", action="store_true")
+        if name == "jwks":
+            p.add_argument("--pub", nargs="+", default=["cosign.pub"])
+            p.add_argument("--issuer", default=BACKUP_ISSUER)
     args = parser.parse_args(argv)
     try:
         return args.fn(args)

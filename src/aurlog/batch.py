@@ -3,38 +3,51 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import OBSERVER, PREDICATE_TYPE, SOURCE
+from . import BACKUP_ISSUER, BACKUP_PREDICATE_TYPE, OBSERVER, PREDICATE_TYPE, SOURCE
+
+DEFAULT = {"predicate_type": PREDICATE_TYPE, "observer": OBSERVER}
 
 
 def subject_digest(pkgbase):
     return hashlib.sha256(f"aur/{pkgbase}".encode()).hexdigest()
 
 
-def predicate(entries, now):
-    stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def backup_profile(kid):
     return {
-        "observer": OBSERVER,
+        "predicate_type": BACKUP_PREDICATE_TYPE,
+        "observer": BACKUP_ISSUER,
+        "signer": {"issuer": BACKUP_ISSUER, "kid": kid},
+    }
+
+
+def predicate(entries, now, profile=DEFAULT):
+    stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    pred = {
+        "observer": profile["observer"],
         "source": SOURCE,
         "observed_at": stamp,
         "entries": entries,
     }
+    if "signer" in profile:
+        pred["signer"] = profile["signer"]
+    return pred
 
 
-def statement(entries, now):
+def statement(entries, now, profile=DEFAULT):
     return {
         "_type": "https://in-toto.io/Statement/v1",
         "subject": [
             {"name": f"aur/{e['pkgbase']}", "digest": {"sha256": subject_digest(e["pkgbase"])}}
             for e in entries
         ],
-        "predicateType": PREDICATE_TYPE,
-        "predicate": predicate(entries, now),
+        "predicateType": profile["predicate_type"],
+        "predicate": predicate(entries, now, profile),
     }
 
 
-def write(out_dir, entries, now):
+def write(out_dir, entries, now, profile=DEFAULT):
     os.makedirs(out_dir, exist_ok=True)
-    stmt = statement(entries, now)
+    stmt = statement(entries, now, profile)
     with open(os.path.join(out_dir, "predicate.json"), "w") as fh:
         json.dump(stmt["predicate"], fh, indent=1)
     with open(os.path.join(out_dir, "statement.json"), "w") as fh:

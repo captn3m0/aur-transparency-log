@@ -51,13 +51,20 @@ cosign verify-blob-attestation --bundle bundle.json \
   --type https://captnemo.in/aur-transparency-log/aur-published/v1 subject
 ```
 
-Backup key (`cosign.pub`, sha256 of DER `1ef7424d...e0199`), used by a
-separate deployment of this same code:
+Backup key (`cosign.pub`, sha256 of DER `1ef7424d...e0199`) is used by a
+separate deployment of this code. It has its own predicate type
+`.../aur-published-backup/v1` and issuer `.../backup`; the predicate carries
+`signer: {issuer, kid}`. The issuer publishes `jwks.json` and
+`.well-known/openid-configuration` (discovery only, not a login provider).
 
 ```sh
 cosign verify-blob-attestation --key cosign.pub --bundle bundle.json \
-  --type https://captnemo.in/aur-transparency-log/aur-published/v1 subject
+  --type https://captnemo.in/aur-transparency-log/aur-published-backup/v1 subject
 ```
+
+Match the `kid` in the predicate against
+https://captnemo.in/aur-transparency-log/backup/jwks.json. Regenerate the JWKS
+with `python -m aurlog jwks --pub cosign.pub --out <dir>`.
 
 A client passes a cooldown when the Rekor time of the earliest entry for the
 commit is older than the cooldown. `keys.json` lists identities and keys with
@@ -67,7 +74,8 @@ validity windows.
 
 ```sh
 export COSIGN_PASSWORD=...        # from a secret
-python -m aurlog run --key /secrets/cosign.key --state /data --out /tmp/out
+python -m aurlog run --key /secrets/cosign.key --pub /secrets/cosign.pub \
+  --state /data --out /tmp/out
 ```
 
 `run` loops every 300s, signs with `cosign attest-blob` (Rekor and TSA via the
