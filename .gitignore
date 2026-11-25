@@ -1,0 +1,8 @@
+.secrets/
+.tmp/
+__pycache__/
+*.pyc
+.venv/
+out/
+.state/
+cosign.key

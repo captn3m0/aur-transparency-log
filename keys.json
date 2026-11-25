@@ -1,0 +1,23 @@
+{
+  "predicate_type": "https://captn3m0.github.io/aur-transparency-log/aur-published/v1",
+  "identities": [
+    {
+      "type": "github-actions",
+      "repo": "captn3m0/aur-transparency-log",
+      "workflow": "https://github.com/captn3m0/aur-transparency-log/.github/workflows/observe.yml@refs/heads/main",
+      "oidc_issuer": "https://token.actions.githubusercontent.com",
+      "valid_from": "2026-11-25T00:00:00Z",
+      "valid_until": null
+    }
+  ],
+  "keys": [
+    {
+      "id": "backup-1",
+      "type": "ecdsa-p256",
+      "public_key_file": "cosign.pub",
+      "sha256_der_fingerprint": "1ef7424d85f457cdde8b7532d7f820535376df764569c7aaf18c3bac749e0199",
+      "valid_from": "2026-11-25T00:00:00Z",
+      "valid_until": null
+    }
+  ]
+}
