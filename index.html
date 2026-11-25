@@ -268,10 +268,10 @@ code { font-size: 1.3rem; }
 <p>Attestations are signed by this workflow identity:</p>
 <pre><code>https://github.com/captn3m0/aur-transparency-log/.github/workflows/observe.yml@refs/heads/main
 issuer: https://token.actions.githubusercontent.com
-predicate: https://captn3m0.github.io/aur-transparency-log/aur-published/v1</code></pre>
+predicate: https://captnemo.in/aur-transparency-log/aur-published/v1</code></pre>
 <pre><code>printf %s 'aur/yay' > subject
 gh attestation verify subject -R captn3m0/aur-transparency-log \
-  --predicate-type https://captn3m0.github.io/aur-transparency-log/aur-published/v1</code></pre>
+  --predicate-type https://captnemo.in/aur-transparency-log/aur-published/v1</code></pre>
 <p>A separate deployment of the same code signs with a backup key (SHA-256 of DER <code>1ef7424d…e0199</code>):</p>
 <pre><code>-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw9kW7CnfyZ4+zD23IIiCN92V8daY
@@ -293,7 +293,7 @@ NQAe8Yj+pTmmelF8qn/fLCtcNouggp0qnZujx5ZTcAgUWWeDj1bRGBPEew==
 
 <script>
 const REPO = "captn3m0/aur-transparency-log";
-const PRED = "https://captn3m0.github.io/aur-transparency-log/aur-published/v1";
+const PRED = "https://captnemo.in/aur-transparency-log/aur-published/v1";
 const RSS = "https://aur.archlinux.org/rss/modified";
 const RPC = "https://aur.archlinux.org/rpc/v5/info?";
 const ROUTES = [
