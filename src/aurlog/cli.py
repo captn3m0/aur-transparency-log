@@ -3,7 +3,7 @@ import os
 import sys
 import time
 
-from . import BACKUP_ISSUER, batch, jwk, observe, sign
+from . import KEY_ISSUER, batch, jwk, observe, sign
 
 
 def emit(**values):
@@ -46,7 +46,7 @@ def cmd_jwks(args):
 
 
 def cmd_run(args):
-    profile = batch.backup_profile(jwk.from_pem(args.pub[0])["kid"])
+    profile = batch.key_profile(jwk.from_pem(args.pub[0])["kid"])
     while True:
         try:
             cycle(args, profile)
@@ -73,7 +73,7 @@ def main(argv=None):
             p.add_argument("--offline", action="store_true")
         if name == "jwks":
             p.add_argument("--pub", nargs="+", default=["cosign.pub"])
-            p.add_argument("--issuer", default=BACKUP_ISSUER)
+            p.add_argument("--issuer", default=KEY_ISSUER)
     args = parser.parse_args(argv)
     try:
         return args.fn(args)

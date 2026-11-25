@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import BACKUP_ISSUER, BACKUP_PREDICATE_TYPE, OBSERVER, PREDICATE_TYPE, SOURCE
+from . import KEY_ISSUER, KEY_PREDICATE_TYPE, OBSERVER, PREDICATE_TYPE, SOURCE
 
 DEFAULT = {"predicate_type": PREDICATE_TYPE, "observer": OBSERVER}
 
@@ -12,11 +12,11 @@ def subject_digest(pkgbase):
     return hashlib.sha256(f"aur/{pkgbase}".encode()).hexdigest()
 
 
-def backup_profile(kid):
+def key_profile(kid):
     return {
-        "predicate_type": BACKUP_PREDICATE_TYPE,
-        "observer": BACKUP_ISSUER,
-        "signer": {"issuer": BACKUP_ISSUER, "kid": kid},
+        "predicate_type": KEY_PREDICATE_TYPE,
+        "observer": KEY_ISSUER,
+        "signer": {"issuer": KEY_ISSUER, "kid": kid},
     }
 
 

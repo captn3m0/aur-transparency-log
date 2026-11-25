@@ -66,19 +66,19 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class BackupTests(unittest.TestCase):
+class KeyTests(unittest.TestCase):
     def test_jwk_from_cosign_pub(self):
         from aurlog import jwk
 
         key = jwk.from_pem(os.path.join(os.path.dirname(__file__), "..", "cosign.pub"))
         self.assertEqual((key["kty"], key["crv"], key["alg"]), ("EC", "P-256", "ES256"))
         self.assertEqual(key["kid"], jwk.thumbprint(key))
-        self.assertEqual(len(jwk.discovery("https://x/backup")["jwks_uri"]) > 0, True)
+        self.assertEqual(len(jwk.discovery("https://x")["jwks_uri"]) > 0, True)
 
-    def test_backup_statement_has_own_type_and_signer(self):
-        from aurlog import BACKUP_PREDICATE_TYPE
+    def test_key_statement_has_own_type_and_signer(self):
+        from aurlog import KEY_PREDICATE_TYPE
 
-        stmt = batch.statement([{"pkgbase": "foo", "commit": SHA}], 0, batch.backup_profile("kid1"))
-        self.assertEqual(stmt["predicateType"], BACKUP_PREDICATE_TYPE)
+        stmt = batch.statement([{"pkgbase": "foo", "commit": SHA}], 0, batch.key_profile("kid1"))
+        self.assertEqual(stmt["predicateType"], KEY_PREDICATE_TYPE)
         self.assertEqual(stmt["predicate"]["signer"]["kid"], "kid1")
         self.assertNotIn("signer", batch.statement([], 0)["predicate"])

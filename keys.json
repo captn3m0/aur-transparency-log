@@ -11,20 +11,20 @@
   ],
   "keys": [
     {
-      "id": "backup-1",
+      "id": "key-1",
       "type": "ecdsa-p256",
       "public_key_file": "cosign.pub",
       "sha256_der_fingerprint": "1ef7424d85f457cdde8b7532d7f820535376df764569c7aaf18c3bac749e0199",
       "valid_from": "2026-11-25T00:00:00Z",
       "valid_until": null,
       "kid": "Wh95wQGTlF_kd6vai2kVu_Oau6NZaqsUr7pO3ikkkJM",
-      "issuer": "https://captnemo.in/aur-transparency-log/backup",
-      "jwks_uri": "https://captnemo.in/aur-transparency-log/backup/jwks.json",
-      "predicate_type": "https://captnemo.in/aur-transparency-log/aur-published-backup/v1"
+      "issuer": "https://captnemo.in/aur-transparency-log",
+      "jwks_uri": "https://captnemo.in/aur-transparency-log/jwks.json",
+      "predicate_type": "https://captnemo.in/aur-transparency-log/aur-published-key/v1"
     }
   ],
   "predicate_types": {
     "github-actions": "https://captnemo.in/aur-transparency-log/aur-published/v1",
-    "backup": "https://captnemo.in/aur-transparency-log/aur-published-backup/v1"
+    "key": "https://captnemo.in/aur-transparency-log/aur-published-key/v1"
   }
 }
