@@ -272,11 +272,12 @@ predicate: https://captnemo.in/aur-transparency-log/aur-published/v1</code></pre
 <pre><code>printf %s 'aur/yay' > subject
 gh attestation verify subject -R captn3m0/aur-transparency-log \
   --predicate-type https://captnemo.in/aur-transparency-log/aur-published/v1</code></pre>
-<p>A separate deployment signs with a regular key, used less often, with its own predicate type <code>…/aur-published-key/v1</code> and issuer <code>https://captnemo.in/aur-transparency-log</code>, which publishes a <a href="jwks.json">JWKS</a> and <a href=".well-known/openid-configuration">discovery document</a> (SHA-256 of DER <code>1ef7424d…e0199</code>). This page only looks up the GitHub identity's attestations:</p>
+<p>The service at <a href="https://aur-tl.captnemo.in/">aur-tl.captnemo.in</a> signs each batch with its own key, predicate type <code>…/aur-published-key/v1</code>, issuer <code>https://captnemo.in/aur-transparency-log</code>. It publishes a <a href="jwks.json">JWKS</a> and <a href=".well-known/openid-configuration">discovery document</a>, and each commit's time comes from an RFC 3161 token. Key SHA-256 of DER <code>6cb2c44d…12fe</code>:</p>
 <pre><code>-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw9kW7CnfyZ4+zD23IIiCN92V8daY
-NQAe8Yj+pTmmelF8qn/fLCtcNouggp0qnZujx5ZTcAgUWWeDj1bRGBPEew==
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4aScqmkbVDfEonuhVCigYGOzd2G8
+K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
 -----END PUBLIC KEY-----</code></pre>
+<p>Query it with <code>GET /v1/pkg/&lt;pkgbase&gt;?before=&lt;unix, hour-aligned&gt;</code> for the newest commit that passes a cooldown. The table below uses GitHub attestations from the earlier workflow.</p>
 
 <h2>Recent AUR updates</h2>
 <p id="status">Loading the AUR feed through rss2json (it sends CORS headers; the AUR does not)…</p>
