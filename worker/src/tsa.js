@@ -26,7 +26,7 @@ export function genTime(resp) {
 export async function timestamp(signature, fetchFn = fetch) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", signature));
   const res = await fetchFn(TSA_URL, { method: "POST", headers: { "Content-Type": "application/timestamp-query" }, body: buildRequest(digest) });
-  if (!res.ok) throw new Error(`tsa http ${res.status}`);
+  if (!res.ok) throw new Error(`tsa http ${res.status}: ${(await res.text()).slice(0, 120)}`);
   const resp = new Uint8Array(await res.arrayBuffer());
   checkGranted(resp);
   return { token: resp, time: genTime(resp) };

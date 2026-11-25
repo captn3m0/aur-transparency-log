@@ -17,7 +17,3 @@ PUBLIC_BASE = "https://aur-tl.captnemo.in"
 GRAN = "3600"
 MAX_CANDIDATES = "15"
 LOOKBACK = "1800"
-
-[[routes]]
-pattern = "aur-tl.captnemo.in"
-custom_domain = true

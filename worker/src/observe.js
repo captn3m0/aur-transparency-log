@@ -54,6 +54,12 @@ async function pool(items, n, fn) {
   return out;
 }
 
+async function fail(env, st, now, stage, msg) {
+  console.log(stage, "failed", msg);
+  await writeJson(env.BUCKET, "s/state.json", { ...st, last_attempt: now, last_error: `${stage}: ${msg}`.slice(0, 300) });
+  return { entries: 0, error: stage };
+}
+
 export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Date.now() / 1000)) {
   const st = await readJson(env.BUCKET, "s/state.json", { last_ts: 0, etag: null, pending: {} });
   const since = st.last_ts ? st.last_ts - 60 : now - Number(env.LOOKBACK || 1800);
@@ -71,8 +77,7 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
       throw new Error(`rss http ${res.status}`);
     }
   } catch (e) {
-    console.log("rss failed", e.message);
-    return { entries: 0, error: "rss" };
+    return fail(env, st, now, "rss", e.message);
   }
   const list = [...names].filter((n) => BASE_RE.test(n)).sort();
   let bases = Object.fromEntries(list.map((n) => [n, n]));
@@ -103,19 +108,22 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
       entries.push(v);
     }
   });
+  const headErrors = results.filter(([, e]) => e).map(([, e]) => e.message);
+  st.last_head_error = headErrors[0] || null;
   if (entries.length) {
     try {
       const stmt = await statement(entries, now, env.ISSUER, signer.kid);
       const { bundle, time } = await signBundle(signer, stmt, fetchFn);
-      await recordCycle(env.BUCKET, `${time}-${entries[0].commit.slice(0, 8)}`, bundle, entries, time);
+      const cycle = `${time}-${entries[0].commit.slice(0, 8)}`;
+      await recordCycle(env.BUCKET, cycle, bundle, entries, time);
+      const fresh = entries.map((x) => ({ pkgbase: x.pkgbase, commit: x.commit, time, bundle: `${env.PUBLIC_BASE}/b/${cycle}.sigstore.json` }));
+      st.recent = [...fresh, ...(st.recent || [])].slice(0, 60);
       st.last_cycle = time;
     } catch (e) {
-      console.log("sign/store failed", e.message);
       for (const x of entries) pending[owner[x.pkgbase]] = (st.pending[owner[x.pkgbase]] || 0) + 1;
-      await writeJson(env.BUCKET, "s/state.json", { ...st, pending });
-      return { entries: 0, error: "sign" };
+      return fail(env, { ...st, pending }, now, "sign", e.message);
     }
   }
-  await writeJson(env.BUCKET, "s/state.json", { ...st, last_ts: newestTs, pending, last_run: now });
+  await writeJson(env.BUCKET, "s/state.json", { ...st, last_ts: newestTs, pending, last_run: now, last_error: null, last_attempt: now });
   return { entries: entries.length };
 }

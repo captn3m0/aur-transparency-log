@@ -6,7 +6,8 @@
       "workflow": "https://github.com/captn3m0/aur-transparency-log/.github/workflows/observe.yml@refs/heads/main",
       "oidc_issuer": "https://token.actions.githubusercontent.com",
       "valid_from": "2026-11-25T00:00:00Z",
-      "valid_until": null
+      "valid_until": "2026-11-26T00:00:00Z",
+      "note": "retired: GitHub Actions observer replaced by the Worker"
     }
   ],
   "keys": [
