@@ -1,5 +1,5 @@
 {
-  "predicate_type": "https://captn3m0.github.io/aur-transparency-log/aur-published/v1",
+  "predicate_type": "https://captnemo.in/aur-transparency-log/aur-published/v1",
   "identities": [
     {
       "type": "github-actions",

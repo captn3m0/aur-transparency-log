@@ -39,7 +39,7 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: out/subjects.txt
-          predicate-type: https://captn3m0.github.io/aur-transparency-log/aur-published/v1
+          predicate-type: https://captnemo.in/aur-transparency-log/aur-published/v1
           predicate-path: out/predicate.json
 
       - if: steps.obs.outputs.has_entries != 'true' || steps.attest.outcome == 'success'

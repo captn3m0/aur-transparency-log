@@ -1,7 +1,7 @@
 # aur-transparency-log
 
 Trusted publish timestamps for AUR commits, so AUR helpers can enforce
-dependency cooldowns. Live page: https://captn3m0.github.io/aur-transparency-log/
+dependency cooldowns. Live page: https://captnemo.in/aur-transparency-log/
 
 Git commit dates are set by the pusher. This observer records when a head was
 first seen on aur.archlinux.org and signs it; the time comes from Sigstore
@@ -38,7 +38,7 @@ GitHub Actions identity (needs `gh`; the file is the subject name):
 ```sh
 printf %s 'aur/yay' > subject
 gh attestation verify subject -R captn3m0/aur-transparency-log \
-  --predicate-type https://captn3m0.github.io/aur-transparency-log/aur-published/v1 \
+  --predicate-type https://captnemo.in/aur-transparency-log/aur-published/v1 \
   --format json --jq '.[].verificationResult.statement.predicate'
 ```
 
@@ -48,7 +48,7 @@ Equivalent with cosign, pinning the workflow identity:
 cosign verify-blob-attestation --bundle bundle.json \
   --certificate-identity https://github.com/captn3m0/aur-transparency-log/.github/workflows/observe.yml@refs/heads/main \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --type https://captn3m0.github.io/aur-transparency-log/aur-published/v1 subject
+  --type https://captnemo.in/aur-transparency-log/aur-published/v1 subject
 ```
 
 Backup key (`cosign.pub`, sha256 of DER `1ef7424d...e0199`), used by a
@@ -56,7 +56,7 @@ separate deployment of this same code:
 
 ```sh
 cosign verify-blob-attestation --key cosign.pub --bundle bundle.json \
-  --type https://captn3m0.github.io/aur-transparency-log/aur-published/v1 subject
+  --type https://captnemo.in/aur-transparency-log/aur-published/v1 subject
 ```
 
 A client passes a cooldown when the Rekor time of the earliest entry for the
