@@ -272,7 +272,7 @@ predicate: https://captnemo.in/aur-transparency-log/aur-published/v1</code></pre
 <pre><code>printf %s 'aur/yay' > subject
 gh attestation verify subject -R captn3m0/aur-transparency-log \
   --predicate-type https://captnemo.in/aur-transparency-log/aur-published/v1</code></pre>
-<p>A separate deployment of the same code signs with a backup key (SHA-256 of DER <code>1ef7424d…e0199</code>):</p>
+<p>A separate deployment signs with a backup key, using its own predicate type <code>…/aur-published-backup/v1</code> and issuer <code>https://captnemo.in/aur-transparency-log/backup</code>, which publishes a <a href="backup/jwks.json">JWKS</a> and <a href="backup/.well-known/openid-configuration">discovery document</a> (SHA-256 of DER <code>1ef7424d…e0199</code>). This page only looks up the GitHub identity's attestations:</p>
 <pre><code>-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEw9kW7CnfyZ4+zD23IIiCN92V8daY
 NQAe8Yj+pTmmelF8qn/fLCtcNouggp0qnZujx5ZTcAgUWWeDj1bRGBPEew==
