@@ -296,8 +296,11 @@ const REPO = "captn3m0/aur-transparency-log";
 const PRED = "https://captnemo.in/aur-transparency-log/aur-published/v1";
 const RSS = "https://aur.archlinux.org/rss/modified";
 const RPC = "https://aur.archlinux.org/rpc/v5/info?";
+const WORKER = "";
+const custom = new URLSearchParams(location.search).get("proxy") || WORKER;
 const ROUTES = [
   u => u,
+  ...(custom ? [u => custom + encodeURIComponent(u)] : []),
   u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
   u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
   u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
@@ -409,7 +412,7 @@ async function main() {
   checkNext();
 }
 
-main().catch(e => { $("status").textContent = "Could not load the AUR feed: " + e.message; });
+main().catch(e => { $("status").textContent = "Could not load the AUR feed (" + e.message + "). The AUR sends no CORS headers; append ?proxy=https://your-worker.example/?url= to use your own proxy."; });
 </script>
 </body>
 </html>
