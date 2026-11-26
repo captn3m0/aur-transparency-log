@@ -57,7 +57,7 @@ You can compute a 7-day cooldown cutoff with something like:
 Worked example for a real package (`pelagos`): clone it from the AUR, list its
 commits, then fetch trusted timestamps through the commit, history, cutoff,
 batch and recent endpoints, and verify the signed bundle and RFC 3161 token.
-See [USAGE.md](USAGE.md).
+See [USAGE.md](USAGE.md), also at https://captnemo.in/aur-transparency-log/usage.html.
 
 Quick check of a bundle (take the time from the RFC 3161 token, not the API):
 
