@@ -47,8 +47,3 @@ export async function readJson(bucket, key, fallback) {
 }
 
 export const writeJson = (bucket, key, v) => bucket.put(key, JSON.stringify(v), { httpMetadata: { contentType: "application/json" } });
-
-export async function shardName(base) {
-  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(base)));
-  return (d[0] >> 2).toString(16).padStart(2, "0");
-}
