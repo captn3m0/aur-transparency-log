@@ -25,58 +25,40 @@ summary { cursor: pointer; }
 </head>
 <body>
 <h1>aur-transparency-log</h1>
-<p class="lead">Trusted publish timestamps for AUR commits, so AUR helpers can enforce dependency cooldowns.</p>
+<p class="lead">Trusted publish timestamps for AUR commits, so AUR helpers can enforce dependency cooldowns (among other things).</p>
 <p><span id="health" class="pill">checking service…</span></p>
-<nav><a href="#how">How it works</a><a href="#query">Query</a><a href="#verify">Verify</a><a href="usage.html">Usage</a><a href="#recent">Recent</a><a href="#limits">Limits</a><a href="https://github.com/captn3m0/aur-transparency-log">Source</a></nav>
+<nav><a href="#api">API</a><a href="#verify">Verify</a><a href="#recent">Recent</a><a href="#limits">Limits</a><a href="usage.html">Usage</a><a href="https://github.com/captn3m0/aur-transparency-log">Source</a></nav>
 
-<h2 id="why">Why</h2>
-<p>A cooldown means not installing a release until it is N days old. Git commit dates are set by whoever pushes, and the AUR only shows when the current head was last modified. This service records when each head was first seen on aur.archlinux.org and signs it. The time comes from Sigstore's timestamp authority, not from this project.</p>
+<p>This observer records when a commit was first seen on aur.archlinux.org and signs it. The time comes from Sigstore's timestamp authority - you can trust it without trusting this website.</p>
 
-<h2 id="how">How it works</h2>
-<ol>
-<li>A Cloudflare Worker reads the AUR modified feed every minute.</li>
-<li>It checks each new head against aur.archlinux.org.</li>
-<li>It signs one statement per batch of commits.</li>
-<li>Sigstore's timestamp authority timestamps the signature and Rekor v2 logs it.</li>
-<li>The signed bundle is stored in R2.</li>
-</ol>
-<p>A compromised observer can make commits look newer, never older. Packages already in the AUR on 2026-11-25 were entered the same way.</p>
-
-<h2 id="query">Query</h2>
-<p><code>before</code> is a Unix time that must be a multiple of 3600, so all clients in an hour share one cached URL. The call returns the newest commit at or before it.</p>
-<pre><code>before=$(( $(date +%s) / 3600 * 3600 - 7*86400 ))   # 7-day cooldown
-curl "https://aur-tl.captnemo.in/v1/pkg/yay?before=$before"</code></pre>
+<h2 id="api">API</h2>
+<p>Base URL <code>https://aur-tl.captnemo.in</code>. All endpoints are GET with open CORS.</p>
 <table>
-<thead><tr><th>Endpoint</th><th>Returns</th></tr></thead>
+<thead><tr><th>Endpoint</th><th>Example</th></tr></thead>
 <tbody>
-<tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers?before=4102444800"><code>/v1/pkg/&lt;pkgbase&gt;?before=</code></a></td><td>newest commit at or before the cutoff</td></tr>
-<tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/history"><code>/v1/pkg/&lt;pkgbase&gt;/history</code></a></td><td>every attested commit, newest first</td></tr>
-<tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/commit/6b25f276555d6503c814531c993a2c9fcf965055"><code>/v1/pkg/&lt;pkgbase&gt;/commit/&lt;sha&gt;</code></a></td><td>one commit</td></tr>
-<tr><td><a href="https://aur-tl.captnemo.in/v1/batch?before=4102444800&amp;pkg=python-transformers&amp;pkg=agent-of-empires-bin"><code>/v1/batch?before=&amp;pkg=</code></a></td><td>many packages in one request</td></tr>
-<tr><td><a href="https://aur-tl.captnemo.in/v1/recent"><code>/v1/recent</code></a></td><td>latest attested commits</td></tr>
-<tr><td><a href="https://aur-tl.captnemo.in/v1/keys"><code>/v1/keys</code></a></td><td>signing keys with hint and PEM (<a href="https://aur-tl.captnemo.in/v1/keys.pem">PEM</a>, <a href="https://aur-tl.captnemo.in/jwks.json">JWKS</a>)</td></tr>
-<tr><td><a href="https://aur-tl.captnemo.in/healthz"><code>/healthz</code></a></td><td>cron age and last error</td></tr>
+<tr><td>Newest commit at or before a cutoff</td><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers?before=4102444800">/v1/pkg/python-transformers?before=4102444800</a></td></tr>
+<tr><td>One commit</td><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/commit/6b25f276555d6503c814531c993a2c9fcf965055">/v1/pkg/python-transformers/commit/6b25f276555d6503c814531c993a2c9fcf965055</a></td></tr>
+<tr><td>History, newest first</td><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/history">/v1/pkg/python-transformers/history</a></td></tr>
+<tr><td>Many packages, one request</td><td><a href="https://aur-tl.captnemo.in/v1/batch?before=4102444800&pkg=python-transformers&pkg=agent-of-empires-bin">/v1/batch?before=4102444800&amp;pkg=python-transformers&amp;pkg=agent-of-empires-bin</a></td></tr>
+<tr><td>Recently attested</td><td><a href="https://aur-tl.captnemo.in/v1/recent">/v1/recent</a></td></tr>
+<tr><td>Signed bundle</td><td><a href="https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json">/b/1795649492-6b25f276.sigstore.json</a></td></tr>
+<tr><td>Signing key (JWK)</td><td><a href="https://aur-tl.captnemo.in/v1/keys">/v1/keys</a></td></tr>
+<tr><td>Signing key (PEM)</td><td><a href="https://aur-tl.captnemo.in/v1/keys.pem">/v1/keys.pem</a></td></tr>
+<tr><td>JWKS</td><td><a href="https://aur-tl.captnemo.in/jwks.json">/jwks.json</a></td></tr>
+<tr><td>OIDC discovery</td><td><a href="https://aur-tl.captnemo.in/.well-known/openid-configuration">/.well-known/openid-configuration</a></td></tr>
+<tr><td>Health (cron age and last error)</td><td><a href="https://aur-tl.captnemo.in/healthz">/healthz</a></td></tr>
 </tbody>
 </table>
-<p>All endpoints are GET with open CORS. The result's <code>status</code> is <code>ok</code>, <code>too_new</code> (the newest commit is newer than the cutoff; fail the cooldown or use <code>/history</code>) or <code>not_observed</code>. A bad <code>before</code> returns 400 with the rounded value in <code>suggest</code>. Full documentation is in the <a href="https://github.com/captn3m0/aur-transparency-log#api">README</a>.</p>
+<p><code>/v1/pkg</code> returns a <code>status</code>:</p>
+<ul>
+<li><code>ok</code></li>
+<li><code>too_new</code> (the newest commit is newer than the cutoff; fail the cooldown or roll back via <code>/history</code>)</li>
+<li><code>not_observed</code>. A bad <code>before</code> returns 400 with the rounded value in <code>suggest</code>.</li>
+</ul>
 
 <h2 id="verify">Verify</h2>
-<p>Verify the bundle, not the API. The bundle names its key by hint; pick the matching key from <code>/v1/keys</code>. Take the time from the RFC 3161 token. <a href="usage.html">Usage</a> walks through this for a real package.</p>
-<pre><code>curl -sO https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json
-hint=$(jq -r .verificationMaterial.publicKey.hint 1795649492-6b25f276.sigstore.json)
-curl -s https://aur-tl.captnemo.in/v1/keys | jq -r --arg h "$hint" '.keys[] | select(.hint == $h) | .pem' &gt; worker.pub
-printf %s 'aur/python-transformers' &gt; subject
-cosign verify-blob-attestation --key worker.pub \
-  --bundle 1795649492-6b25f276.sigstore.json \
-  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 subject</code></pre>
-<details>
-<summary>Signing key <code>worker-1</code></summary>
-<p>SHA-256 of DER <code>6cb2c44d…12fe</code>. Also published as <a href="https://aur-tl.captnemo.in/v1/keys.pem">PEM</a> and as a <a href="jwks.json">JWKS</a> with an <a href=".well-known/openid-configuration">OIDC discovery document</a>, issuer <code>https://captnemo.in/aur-transparency-log</code>.</p>
-<pre><code>-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4aScqmkbVDfEonuhVCigYGOzd2G8
-K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
------END PUBLIC KEY-----</code></pre>
-</details>
+<p>See <a href="usage.html">Usage</a>, or <a href="https://github.com/captn3m0/aur-transparency-log/blob/main/USAGE.md">USAGE.md</a> in the repository.</p>
+<p>Key <code>worker-1</code>: <a href="https://aur-tl.captnemo.in/v1/keys.pem">PEM</a>, <a href="https://aur-tl.captnemo.in/jwks.json">JWKS</a>.</p>
 
 <h2 id="recent">Recently attested</h2>
 <p id="status">Loading…</p>
@@ -90,11 +72,7 @@ K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
 <ul>
 <li>No HA guarantees.</li>
 <li>No entries before 2026-11-25.</li>
-<li>The AUR feed only covers about 90 minutes. Packages can be skipped if it is missed during an outage.</li>
-<li>Only observed heads are attested, not intermediate commits. Deletions are not attested.</li>
-<li>Timestamps can be well after the AUR's <code>LastModified</code>, because timestamping is delegated to Sigstore.</li>
-<li>The signing key is a Worker secret, not an HSM.</li>
-<li>Rekor v2 has no search. Find an entry by the log index in its bundle.</li>
+<li>Trusted timestamps might be much beyond <code>LastModified</code> returned from the AUR, since I didn't want to do timestamping myself.</li>
 </ul>
 
 <script>
