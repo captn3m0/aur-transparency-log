@@ -283,7 +283,7 @@ summary { cursor: pointer; }
 <li>Sigstore's timestamp authority timestamps the signature, and Rekor v2 logs it.</li>
 <li>The signed bundle is stored; nothing lives in this repository.</li>
 </ol>
-<p>A compromised observer can only make commits look newer, never older. A one-off signed snapshot covers every package that existed at launch.</p>
+<p>A compromised observer can only make commits look newer, never older. At launch the current state of every package was entered the same way.</p>
 
 <h2 id="query">Query</h2>
 <p>Ask for the newest commit that already passes your cooldown. Give a Unix time rounded down to the hour, so everyone asking in the same hour shares a cached answer.</p>
@@ -296,7 +296,6 @@ curl "https://aur-tl.captnemo.in/v1/pkg/yay?before=$before"</code></pre>
 <tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/history"><code>/v1/pkg/&lt;pkgbase&gt;/history</code></a></td><td>every attested commit, newest first</td></tr>
 <tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/commit/6b25f276555d6503c814531c993a2c9fcf965055"><code>/v1/pkg/&lt;pkgbase&gt;/commit/&lt;sha&gt;</code></a></td><td>one commit</td></tr>
 <tr><td><a href="https://aur-tl.captnemo.in/v1/batch?before=4102444800&amp;pkg=python-transformers&amp;pkg=agent-of-empires-bin"><code>/v1/batch?before=&amp;pkg=</code></a></td><td>many packages in one request</td></tr>
-<tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/yay/snapshot"><code>/v1/pkg/&lt;pkgbase&gt;/snapshot</code></a></td><td>entry in the launch snapshot</td></tr>
 <tr><td><a href="https://aur-tl.captnemo.in/v1/recent"><code>/v1/recent</code></a></td><td>latest attested commits</td></tr>
 </tbody>
 </table>
@@ -330,7 +329,7 @@ K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
 <ul>
 <li>If the feed (about 90 minutes of history) is missed during an outage, packages can be skipped.</li>
 <li>Deletions are not attested, and only observed heads are, never intermediate commits.</li>
-<li>History before launch is the snapshot only; the signing key is a Worker secret, not an HSM.</li>
+<li>History starts at launch, and the signing key is a Worker secret, not an HSM.</li>
 <li>Rekor v2 has no search: find an entry by the log index in its bundle.</li>
 </ul>
 
