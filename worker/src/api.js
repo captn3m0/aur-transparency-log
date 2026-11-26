@@ -28,6 +28,8 @@ function lookupCache(r, before, now) {
   return settled(before, now) ? "public, max-age=3600" : "public, max-age=300";
 }
 
+const pem = (spki) => `-----BEGIN PUBLIC KEY-----\n${btoa(String.fromCharCode(...spki)).replace(/(.{64})(?=.)/g, "$1\n")}\n-----END PUBLIC KEY-----\n`;
+
 export async function handle(req, env, signer, now = Math.floor(Date.now() / 1000)) {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
@@ -35,7 +37,7 @@ export async function handle(req, env, signer, now = Math.floor(Date.now() / 100
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const gran = Number(env.GRAN || 3600);
   let m;
-  if (path === "/") return json({ name: "aur-transparency-log", docs: "https://captnemo.in/aur-transparency-log/", endpoints: ["/v1/pkg/{pkgbase}?before=", "/v1/pkg/{pkgbase}/commit/{sha}", "/v1/pkg/{pkgbase}/history", "/v1/batch?before=&pkg=", "/v1/recent", "/v1/keys", "/healthz"] });
+  if (path === "/") return json({ name: "aur-transparency-log", docs: "https://captnemo.in/aur-transparency-log/", endpoints: ["/v1/pkg/{pkgbase}?before=", "/v1/pkg/{pkgbase}/commit/{sha}", "/v1/pkg/{pkgbase}/history", "/v1/batch?before=&pkg=", "/v1/recent", "/v1/keys", "/v1/keys.pem", "/healthz"] });
   if (path === "/healthz") {
     const st = await readJson(env.BUCKET, "s/state.json", null);
     const age = st?.last_run ? now - st.last_run : null;
@@ -45,7 +47,8 @@ export async function handle(req, env, signer, now = Math.floor(Date.now() / 100
     const st = await readJson(env.BUCKET, "s/state.json", null);
     return json({ items: st?.recent ?? [] }, 200, "public, max-age=60");
   }
-  if (path === "/v1/keys") return json({ issuer: env.ISSUER, keys: [signer.jwk] }, 200, DAY);
+  if (path === "/v1/keys") return json({ issuer: env.ISSUER, keys: [{ ...signer.jwk, hint: signer.hint, pem: pem(signer.spki) }] }, 200, DAY);
+  if (path === "/v1/keys.pem") return new Response(pem(signer.spki), { headers: { "Content-Type": "application/x-pem-file", "Cache-Control": DAY, ...CORS } });
   if (path === "/jwks.json") return json({ keys: [signer.jwk] }, 200, DAY);
   if (path === "/.well-known/openid-configuration") {
     return json({ issuer: env.ISSUER, jwks_uri: `${env.PUBLIC_BASE}/jwks.json`, response_types_supported: ["id_token"], subject_types_supported: ["public"], id_token_signing_alg_values_supported: ["ES256"] }, 200, DAY);
