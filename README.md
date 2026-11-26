@@ -26,6 +26,8 @@ Base URL `https://aur-tl.captnemo.in`.  All endpoints are GET with open CORS.
 | JWKS | https://aur-tl.captnemo.in/jwks.json |
 | OIDC discovery | https://aur-tl.captnemo.in/.well-known/openid-configuration |
 | Health (cron age and last error) | https://aur-tl.captnemo.in/healthz |
+| Prometheus metrics | https://aur-tl.captnemo.in/metrics |
+| Same, behind any Basic or Bearer credential (for Grafana Cloud) | https://aur-tl.captnemo.in/metrics/authenticated |
 | Index | https://aur-tl.captnemo.in/ |
 
 `/v1/pkg` returns a `status`:

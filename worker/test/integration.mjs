@@ -40,3 +40,4 @@ console.log("commit", await call(`/v1/pkg/${e.pkgbase}/commit/${e.commit}`));
 console.log("history", JSON.stringify(await call(`/v1/pkg/${e.pkgbase}/history`)).slice(0, 200));
 console.log("keys", (await call("/v1/keys")).keys[0].kid);
 console.log("health", await call("/healthz"));
+console.log("metrics", (await (await handle(new Request("https://aur-tl.captnemo.in/metrics"), env, signer, now)).text()).split("\n").filter((l) => l && !l.startsWith("#")).join(" | "));

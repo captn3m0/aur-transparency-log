@@ -15,6 +15,10 @@ Subjects are `aur/<pkgbase>` with digest `sha256("aur/<pkgbase>")`; commits
 live in the predicate. Failures are recorded in `s/state.json` and surfaced at
 `/healthz`; packages that fail a head check are retried up to 6 times.
 
+`/metrics` renders gauges from `s/state.json` plus counters kept in its
+`metrics` field. Counters only advance on cycles that write state, so quiet
+cycles (nothing new, state written under 5 minutes ago) are not counted.
+
 R2 layout: `b/<cycle>.sigstore.json`, `c/<pkgbase>/<inverted-ts>-<commit>`
 (newest first), `k/<pkgbase>/<commit>`, `s/state.json`.
 

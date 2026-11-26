@@ -1,3 +1,4 @@
+import { bump } from "./metrics.js";
 import { signBundle, statement } from "./sign.js";
 import { BASE_RE, newest, readJson, recordCycle, writeJson } from "./store.js";
 
@@ -56,11 +57,13 @@ async function pool(items, n, fn) {
 
 async function fail(env, st, now, stage, msg) {
   console.log(stage, "failed", msg);
+  bump(st, `failures_${stage}`);
   await writeJson(env.BUCKET, "s/state.json", { ...st, last_attempt: now, last_error: `${stage}: ${msg}`.slice(0, 300) });
   return { entries: 0, error: stage };
 }
 
 export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Date.now() / 1000)) {
+  const started = Date.now();
   const st = await readJson(env.BUCKET, "s/state.json", { last_ts: 0, etag: null, pending: {} });
   const since = st.last_ts ? st.last_ts - 60 : now - Number(env.LOOKBACK || 1800);
   const names = new Set(Object.keys(st.pending));
@@ -69,7 +72,10 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
     const res = await get(RSS_URL, fetchFn, st.etag ? { "If-None-Match": st.etag } : {});
     if (res.status === 200) {
       st.etag = res.headers.get("ETag");
-      for (const [name, ts] of parseRss(await res.text())) {
+      const rows = parseRss(await res.text());
+      bump(st, "rss_fetches_total");
+      bump(st, "rss_items_total", rows.length);
+      for (const [name, ts] of rows) {
         newestTs = Math.max(newestTs, ts);
         if (ts >= since) names.add(name);
       }
@@ -84,6 +90,7 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
   try {
     if (list.length) bases = await rpcInfo(list, fetchFn);
   } catch (e) {
+    bump(st, "rpc_errors_total");
     console.log("rpc failed, assuming pkgname == pkgbase", e.message);
   }
   const owner = {};
@@ -103,6 +110,7 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
     if (err) {
       const tries = (st.pending[owner[work[i]]] || 0) + 1;
       if (tries < 6) pending[owner[work[i]]] = tries;
+      else bump(st, "head_dropped_total");
       console.log("head check failed", work[i], err.message);
     } else if (v) {
       entries.push(v);
@@ -110,6 +118,8 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
   });
   const headErrors = results.filter(([, e]) => e).map(([, e]) => e.message);
   st.last_head_error = headErrors[0] || null;
+  bump(st, "head_checks_total", work.length);
+  bump(st, "head_errors_total", headErrors.length);
   if (entries.length) {
     try {
       const stmt = await statement(entries, now, env.ISSUER, signer.kid);
@@ -124,12 +134,16 @@ export async function runCycle(env, signer, fetchFn = fetch, now = Math.floor(Da
       const fresh = entries.map((x) => ({ pkgbase: x.pkgbase, commit: x.commit, time, bundle: `${env.PUBLIC_BASE}/b/${cycle}.sigstore.json` }));
       st.recent = [...fresh, ...(st.recent || [])].slice(0, 60);
       st.last_cycle = time;
+      bump(st, "bundles_total");
+      bump(st, "entries_total", entries.length);
     } catch (e) {
       for (const x of entries) pending[owner[x.pkgbase]] = (st.pending[owner[x.pkgbase]] || 0) + 1;
       return fail(env, { ...st, pending }, now, "sign", e.message);
     }
   }
-  const quiet = !entries.length && newestTs === st.last_ts && !Object.keys(pending).length && !st.last_error && now - (st.last_run || 0) < 300;
-  if (!quiet) await writeJson(env.BUCKET, "s/state.json", { ...st, last_ts: newestTs, pending, last_run: now, last_error: null, last_attempt: now });
+  const quiet = !entries.length && !work.length && newestTs === st.last_ts && !Object.keys(pending).length && !st.last_error && now - (st.last_run || 0) < 300;
+  if (!quiet) bump(st, "cycles_total");
+  const timing = { last_entries: entries.length, last_candidates: work.length, last_duration: (Date.now() - started) / 1000 };
+  if (!quiet) await writeJson(env.BUCKET, "s/state.json", { ...st, ...timing, last_ts: newestTs, pending, last_run: now, last_error: null, last_attempt: now });
   return { entries: entries.length };
 }

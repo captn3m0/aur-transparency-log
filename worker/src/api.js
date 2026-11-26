@@ -1,3 +1,4 @@
+import { authorized, render } from "./metrics.js";
 import { BASE_RE, COMMIT_RE, atOrBefore, byCommit, history, newest, readJson } from "./store.js";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS" };
@@ -37,11 +38,15 @@ export async function handle(req, env, signer, now = Math.floor(Date.now() / 100
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const gran = Number(env.GRAN || 3600);
   let m;
-  if (path === "/") return json({ name: "aur-transparency-log", docs: "https://captnemo.in/aur-transparency-log/", endpoints: ["/v1/pkg/{pkgbase}?before=", "/v1/pkg/{pkgbase}/commit/{sha}", "/v1/pkg/{pkgbase}/history", "/v1/batch?before=&pkg=", "/v1/recent", "/v1/keys", "/v1/keys.pem", "/healthz"] });
+  if (path === "/") return json({ name: "aur-transparency-log", docs: "https://captnemo.in/aur-transparency-log/", endpoints: ["/v1/pkg/{pkgbase}?before=", "/v1/pkg/{pkgbase}/commit/{sha}", "/v1/pkg/{pkgbase}/history", "/v1/batch?before=&pkg=", "/v1/recent", "/v1/keys", "/v1/keys.pem", "/healthz", "/metrics", "/metrics/authenticated"] });
   if (path === "/healthz") {
     const st = await readJson(env.BUCKET, "s/state.json", null);
     const age = st?.last_run ? now - st.last_run : null;
     return json({ ok: age !== null && age < 900, last_run: st?.last_run ?? null, age, last_attempt: st?.last_attempt ?? null, last_error: st?.last_error ?? null, last_head_error: st?.last_head_error ?? null }, 200, "no-store");
+  }
+  if (path === "/metrics" || path === "/metrics/authenticated") {
+    if (path !== "/metrics" && !authorized(req)) return new Response("unauthorized\n", { status: 401, headers: { "WWW-Authenticate": 'Basic realm="metrics"', "Cache-Control": "no-store" } });
+    return new Response(await render(env, signer, now), { headers: { "Content-Type": "text/plain; version=0.0.4; charset=utf-8", "Cache-Control": "no-store", ...CORS } });
   }
   if (path === "/v1/recent") {
     const st = await readJson(env.BUCKET, "s/state.json", null);
