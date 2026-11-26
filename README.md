@@ -5,9 +5,9 @@ dependency cooldowns (among other things).
 
 Live: https://captnemo.in/aur-transparency-log/ and https://aur-tl.captnemo.in/
 
-This observer records when a head was first seen on aur.archlinux.org and
-signs it; the time comes from Sigstore's timestamp authority, not from this
-project.
+This observer records when a commit was first seen on aur.archlinux.org and
+signs it. The time comes from Sigstore's timestamp authority - you can trust
+it without trusting this website.
 
 ## API
 
@@ -35,40 +35,9 @@ Base URL `https://aur-tl.captnemo.in`.  All endpoints are GET with open CORS.
 cutoff; fail the cooldown or roll back via `/history`)
 - `not_observed`. A bad `before` returns 400 with the rounded value in `suggest`.
 
-### Caching
-
-bundles and commit lookups are immutable (one year); a cutoff more than
-two hours old is immutable once it returns `ok`; `/history` and `/v1/pkg` for the
-current hour cache for 5 minutes, `/v1/recent` for 1 minute, keys for a day.
-
-Responses are also stored in the edge cache under a canonical key, so repeat
-requests never reach R2.
-
-### Timestamps
-
-`before` is a Unix time that must be a multiple of 3600. 
-
-You can compute a 7-day cooldown cutoff with something like:
-
-`before=$(( $(date +%s) / 3600 * 3600 - 7*86400 ))` 
-
 ## Verify
 
-Worked example for a real package (`pelagos`): clone it from the AUR, list its
-commits, then fetch trusted timestamps through the commit, history, cutoff,
-batch and recent endpoints, and verify the signed bundle and RFC 3161 token.
 See [USAGE.md](USAGE.md), also at https://captnemo.in/aur-transparency-log/usage.html.
-
-Quick check of a bundle (take the time from the RFC 3161 token, not the API):
-
-```sh
-curl -s https://aur-tl.captnemo.in/v1/keys.pem -o worker.pub
-curl -sO https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json
-printf %s 'aur/python-transformers' > subject
-cosign verify-blob-attestation --key worker.pub \
-  --bundle 1795649492-6b25f276.sigstore.json \
-  --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 subject
-```
 
 ### Key `worker-1`:
 
