@@ -270,7 +270,7 @@ summary { cursor: pointer; }
 <h1>aur-transparency-log</h1>
 <p class="lead">A trustworthy answer to "when did this AUR commit first appear?", so AUR helpers can wait out a cooldown before installing an update.</p>
 <p><span id="health" class="pill">checking service…</span></p>
-<nav><a href="#how">How it works</a><a href="#query">Query</a><a href="#verify">Verify</a><a href="#recent">Recent</a><a href="#limits">Limits</a><a href="https://github.com/captn3m0/aur-transparency-log">Source</a></nav>
+<nav><a href="#how">How it works</a><a href="#query">Query</a><a href="#verify">Verify</a><a href="usage.html">Usage</a><a href="#recent">Recent</a><a href="#limits">Limits</a><a href="https://github.com/captn3m0/aur-transparency-log">Source</a></nav>
 
 <h2 id="why">Why</h2>
 <p>A cooldown means waiting N days after a release before installing it, so scanners and people can catch malicious updates. Git dates are chosen by whoever pushes, and the AUR only exposes the last change time of the current head. This service records when each head was first seen, with a time Sigstore vouches for, not us.</p>
@@ -297,20 +297,24 @@ curl "https://aur-tl.captnemo.in/v1/pkg/yay?before=$before"</code></pre>
 <tr><td><a href="https://aur-tl.captnemo.in/v1/pkg/python-transformers/commit/6b25f276555d6503c814531c993a2c9fcf965055"><code>/v1/pkg/&lt;pkgbase&gt;/commit/&lt;sha&gt;</code></a></td><td>one commit</td></tr>
 <tr><td><a href="https://aur-tl.captnemo.in/v1/batch?before=4102444800&amp;pkg=python-transformers&amp;pkg=agent-of-empires-bin"><code>/v1/batch?before=&amp;pkg=</code></a></td><td>many packages in one request</td></tr>
 <tr><td><a href="https://aur-tl.captnemo.in/v1/recent"><code>/v1/recent</code></a></td><td>latest attested commits</td></tr>
+<tr><td><a href="https://aur-tl.captnemo.in/v1/keys"><code>/v1/keys</code></a></td><td>signing keys with hint and PEM (<a href="https://aur-tl.captnemo.in/v1/keys.pem">PEM</a>, <a href="https://aur-tl.captnemo.in/jwks.json">JWKS</a>)</td></tr>
+<tr><td><a href="https://aur-tl.captnemo.in/healthz"><code>/healthz</code></a></td><td>cron age and last error</td></tr>
 </tbody>
 </table>
-<p>The result's <code>status</code> is <code>ok</code>, <code>too_new</code> (nothing old enough yet, so fail the cooldown) or <code>not_observed</code>. Full documentation is in the <a href="https://github.com/captn3m0/aur-transparency-log#api">README</a>.</p>
+<p>All endpoints are GET with open CORS. The result's <code>status</code> is <code>ok</code>, <code>too_new</code> (the newest commit is newer than the cutoff: fail the cooldown or roll back via <code>/history</code>) or <code>not_observed</code>. A bad <code>before</code> returns 400 with the rounded value in <code>suggest</code>. Full documentation is in the <a href="https://github.com/captn3m0/aur-transparency-log#api">README</a>.</p>
 
 <h2 id="verify">Verify</h2>
-<p>Don't trust the API; trust the bundle it points to. Take the time from the timestamp token, and confirm the commit appears in the signed statement.</p>
+<p>Don't trust the API; trust the bundle it points to. A bundle names its signing key by hint, so pick the matching key from <code>/v1/keys</code>, then take the time from the RFC 3161 token, not from the API. A worked example for a real package is in <a href="usage.html">Usage</a>.</p>
 <pre><code>curl -sO https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json
+hint=$(jq -r .verificationMaterial.publicKey.hint 1795649492-6b25f276.sigstore.json)
+curl -s https://aur-tl.captnemo.in/v1/keys | jq -r --arg h "$hint" '.keys[] | select(.hint == $h) | .pem' &gt; worker.pub
 printf %s 'aur/python-transformers' &gt; subject
-cosign verify-blob-attestation --key worker-1.pub \
+cosign verify-blob-attestation --key worker.pub \
   --bundle 1795649492-6b25f276.sigstore.json \
   --type https://captnemo.in/aur-transparency-log/aur-published-key/v1 subject</code></pre>
 <details>
 <summary>Signing key <code>worker-1</code></summary>
-<p>SHA-256 of DER <code>6cb2c44d…12fe</code>. Also published as a <a href="jwks.json">JWKS</a> with an <a href=".well-known/openid-configuration">OIDC discovery document</a>, issuer <code>https://captnemo.in/aur-transparency-log</code>.</p>
+<p>SHA-256 of DER <code>6cb2c44d…12fe</code>. Also published as <a href="https://aur-tl.captnemo.in/v1/keys.pem">PEM</a> and as a <a href="jwks.json">JWKS</a> with an <a href=".well-known/openid-configuration">OIDC discovery document</a>, issuer <code>https://captnemo.in/aur-transparency-log</code>.</p>
 <pre><code>-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4aScqmkbVDfEonuhVCigYGOzd2G8
 K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
@@ -329,7 +333,9 @@ K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
 <ul>
 <li>If the feed (about 90 minutes of history) is missed during an outage, packages can be skipped.</li>
 <li>Deletions are not attested, and only observed heads are, never intermediate commits.</li>
-<li>History starts at launch, and the signing key is a Worker secret, not an HSM.</li>
+<li>No HA guarantees, and no entries before 2026-11-25.</li>
+<li>Trusted timestamps can be well after the AUR's <code>LastModified</code>, since timestamping is delegated to Sigstore.</li>
+<li>The signing key is a Worker secret, not an HSM.</li>
 <li>Rekor v2 has no search: find an entry by the log index in its bundle.</li>
 </ul>
 
