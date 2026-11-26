@@ -268,25 +268,25 @@ summary { cursor: pointer; }
 </head>
 <body>
 <h1>aur-transparency-log</h1>
-<p class="lead">A trustworthy answer to "when did this AUR commit first appear?", so AUR helpers can wait out a cooldown before installing an update.</p>
+<p class="lead">Trusted publish timestamps for AUR commits, so AUR helpers can enforce dependency cooldowns.</p>
 <p><span id="health" class="pill">checking service…</span></p>
 <nav><a href="#how">How it works</a><a href="#query">Query</a><a href="#verify">Verify</a><a href="usage.html">Usage</a><a href="#recent">Recent</a><a href="#limits">Limits</a><a href="https://github.com/captn3m0/aur-transparency-log">Source</a></nav>
 
 <h2 id="why">Why</h2>
-<p>A cooldown means waiting N days after a release before installing it, so scanners and people can catch malicious updates. Git dates are chosen by whoever pushes, and the AUR only exposes the last change time of the current head. This service records when each head was first seen, with a time Sigstore vouches for, not us.</p>
+<p>A cooldown means not installing a release until it is N days old. Git commit dates are set by whoever pushes, and the AUR only shows when the current head was last modified. This service records when each head was first seen on aur.archlinux.org and signs it. The time comes from Sigstore's timestamp authority, not from this project.</p>
 
 <h2 id="how">How it works</h2>
 <ol>
-<li>Every minute a Cloudflare Worker reads the AUR "modified" feed.</li>
-<li>It confirms each new head directly on aur.archlinux.org.</li>
+<li>A Cloudflare Worker reads the AUR modified feed every minute.</li>
+<li>It checks each new head against aur.archlinux.org.</li>
 <li>It signs one statement per batch of commits.</li>
-<li>Sigstore's timestamp authority timestamps the signature, and Rekor v2 logs it.</li>
-<li>The signed bundle is stored; nothing lives in this repository.</li>
+<li>Sigstore's timestamp authority timestamps the signature and Rekor v2 logs it.</li>
+<li>The signed bundle is stored in R2.</li>
 </ol>
-<p>A compromised observer can only make commits look newer, never older. At launch the current state of every package was entered the same way.</p>
+<p>A compromised observer can make commits look newer, never older. Packages already in the AUR on 2026-11-25 were entered the same way.</p>
 
 <h2 id="query">Query</h2>
-<p>Ask for the newest commit that already passes your cooldown. Give a Unix time rounded down to the hour, so everyone asking in the same hour shares a cached answer.</p>
+<p><code>before</code> is a Unix time that must be a multiple of 3600, so all clients in an hour share one cached URL. The call returns the newest commit at or before it.</p>
 <pre><code>before=$(( $(date +%s) / 3600 * 3600 - 7*86400 ))   # 7-day cooldown
 curl "https://aur-tl.captnemo.in/v1/pkg/yay?before=$before"</code></pre>
 <table>
@@ -301,10 +301,10 @@ curl "https://aur-tl.captnemo.in/v1/pkg/yay?before=$before"</code></pre>
 <tr><td><a href="https://aur-tl.captnemo.in/healthz"><code>/healthz</code></a></td><td>cron age and last error</td></tr>
 </tbody>
 </table>
-<p>All endpoints are GET with open CORS. The result's <code>status</code> is <code>ok</code>, <code>too_new</code> (the newest commit is newer than the cutoff: fail the cooldown or roll back via <code>/history</code>) or <code>not_observed</code>. A bad <code>before</code> returns 400 with the rounded value in <code>suggest</code>. Full documentation is in the <a href="https://github.com/captn3m0/aur-transparency-log#api">README</a>.</p>
+<p>All endpoints are GET with open CORS. The result's <code>status</code> is <code>ok</code>, <code>too_new</code> (the newest commit is newer than the cutoff; fail the cooldown or use <code>/history</code>) or <code>not_observed</code>. A bad <code>before</code> returns 400 with the rounded value in <code>suggest</code>. Full documentation is in the <a href="https://github.com/captn3m0/aur-transparency-log#api">README</a>.</p>
 
 <h2 id="verify">Verify</h2>
-<p>Don't trust the API; trust the bundle it points to. A bundle names its signing key by hint, so pick the matching key from <code>/v1/keys</code>, then take the time from the RFC 3161 token, not from the API. A worked example for a real package is in <a href="usage.html">Usage</a>.</p>
+<p>Verify the bundle, not the API. The bundle names its key by hint; pick the matching key from <code>/v1/keys</code>. Take the time from the RFC 3161 token. <a href="usage.html">Usage</a> walks through this for a real package.</p>
 <pre><code>curl -sO https://aur-tl.captnemo.in/b/1795649492-6b25f276.sigstore.json
 hint=$(jq -r .verificationMaterial.publicKey.hint 1795649492-6b25f276.sigstore.json)
 curl -s https://aur-tl.captnemo.in/v1/keys | jq -r --arg h "$hint" '.keys[] | select(.hint == $h) | .pem' &gt; worker.pub
@@ -327,16 +327,17 @@ K8UWwGdisArKG0f4TymZ1Hl++QOVskTu4Q44O5I6yTZUplDEgPFJoV2rhA==
 <thead><tr><th>Package</th><th>Attested (UTC)</th><th>Commit</th></tr></thead>
 <tbody id="rows"></tbody>
 </table>
-<p><small>Times link to the signed bundle. This page does not verify signatures; use the command above.</small></p>
+<p><small>Times link to the signed bundle. This page does not verify signatures.</small></p>
 
 <h2 id="limits">Limits</h2>
 <ul>
-<li>If the feed (about 90 minutes of history) is missed during an outage, packages can be skipped.</li>
-<li>Deletions are not attested, and only observed heads are, never intermediate commits.</li>
-<li>No HA guarantees, and no entries before 2026-11-25.</li>
-<li>Trusted timestamps can be well after the AUR's <code>LastModified</code>, since timestamping is delegated to Sigstore.</li>
+<li>No HA guarantees.</li>
+<li>No entries before 2026-11-25.</li>
+<li>The AUR feed only covers about 90 minutes. Packages can be skipped if it is missed during an outage.</li>
+<li>Only observed heads are attested, not intermediate commits. Deletions are not attested.</li>
+<li>Timestamps can be well after the AUR's <code>LastModified</code>, because timestamping is delegated to Sigstore.</li>
 <li>The signing key is a Worker secret, not an HSM.</li>
-<li>Rekor v2 has no search: find an entry by the log index in its bundle.</li>
+<li>Rekor v2 has no search. Find an entry by the log index in its bundle.</li>
 </ul>
 
 <script>
